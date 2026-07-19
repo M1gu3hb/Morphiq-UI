@@ -76,6 +76,7 @@ import {
   normalizeStudioDocument,
   resolveResponsiveNode,
   setPathValue,
+  synchronizeComponentInstances,
   type AccessibilitySettings,
   type AnimatableProperty,
   type BooleanOperation,
@@ -347,7 +348,8 @@ export function StudioShell({ locale }: { locale: Locale }) {
         componentId: source.componentId,
         instanceSourceId: source.instanceSourceId,
         instanceOverrides: source.instanceOverrides,
-        responsive: source.responsive,
+        locked: source.locked,
+        responsive: source.componentId ? source.responsive : blueprint.responsive,
         transform: source.componentId ? source.transform : blueprint.transform,
       } : source;
       let node = resolveResponsiveNode(synchronized, project.canvas.device);
@@ -395,8 +397,9 @@ export function StudioShell({ locale }: { locale: Locale }) {
   }, [exportTab, project, selectedIds]);
 
   const commit = useCallback((next: StudioDocument, history = true, historyGroup?: string) => {
-    if (JSON.stringify(next) === JSON.stringify(project)) return;
-    const stamped = { ...next, updatedAt: new Date().toISOString() };
+    const synchronized = synchronizeComponentInstances(next);
+    if (JSON.stringify(synchronized) === JSON.stringify(project)) return;
+    const stamped = { ...synchronized, updatedAt: new Date().toISOString() };
     const now = Date.now();
     const grouped = Boolean(history && historyGroup && historyGroupRef.current?.key === historyGroup && now - historyGroupRef.current.time < 700);
     if (history && !grouped) setPast((current) => [...current, project].slice(-100));
@@ -421,9 +424,10 @@ export function StudioShell({ locale }: { locale: Locale }) {
       if (!stored) return;
       const normalized = normalizeStudioDocument(JSON.parse(stored));
       if (!normalized) return;
+      const synchronized = synchronizeComponentInstances(normalized);
       const timeout = window.setTimeout(() => {
-        setProject(normalized);
-        setSelectedIds([normalized.nodes[0]?.id].filter((id): id is string => Boolean(id)));
+        setProject(synchronized);
+        setSelectedIds([synchronized.nodes[0]?.id].filter((id): id is string => Boolean(id)));
       }, 0);
       return () => window.clearTimeout(timeout);
     } catch {
@@ -451,11 +455,16 @@ export function StudioShell({ locale }: { locale: Locale }) {
       lastPaint = now;
       const elapsed = (now - start) / 1000 * project.timeline.speed;
       let value = direction === "reverse" ? initial - elapsed : initial + elapsed;
-      if (direction === "alternate") {
-        const relative = Math.max(0, initial - workStart) + elapsed;
-        const cycle = Math.floor(relative / length);
-        const phase = relative % length;
-        value = cycle % 2 ? workEnd - phase : workStart + phase;
+        if (direction === "alternate") {
+          const relative = Math.max(0, initial - workStart) + elapsed;
+          const cycle = Math.floor(relative / length);
+          const phase = relative % length;
+          value = cycle % 2 ? workEnd - phase : workStart + phase;
+          if (!project.timeline.loop && relative >= length * 2) {
+            setPlayhead(workStart);
+            setPlaying(false);
+            return;
+          }
       } else if (value > workEnd || value < workStart) {
         if (project.timeline.loop) value = direction === "reverse" ? workEnd - ((workStart - value) % length) : workStart + ((value - workEnd) % length);
         else {
@@ -495,8 +504,16 @@ export function StudioShell({ locale }: { locale: Locale }) {
   function applyNodeMutation(nodeId: string, patch: NodeOverride, property?: AnimatableProperty | AnimatableProperty[]) {
     const base = structuralNodeMap.get(nodeId);
     if (!base) return;
-    const next = deepClone(project);
     const properties = property ? (Array.isArray(property) ? property : [property]) : [];
+    const localMotionEdit = properties.length > 0 && (project.timeline.autoKey || properties.every((path) => project.timeline.tracks.some((track) => !track.variableId && track.nodeId === nodeId && track.property === path)));
+    if (activeVariantId === "base" && base.instanceSourceId && !localMotionEdit) {
+      const allowed = Object.keys(patch).every((key) => key === "name" || key === "locked");
+      if (!allowed) {
+        setNotice(t("This is a linked instance. Use exposed properties or edit its main component.", "Esta es una instancia vinculada. Usa propiedades expuestas o edita su componente principal."));
+        return;
+      }
+    }
+    const next = deepClone(project);
     if (activeVariantId === "base" && properties.length) {
       const blockedPath = properties.find((path) => {
         const track = next.timeline.tracks.find((candidate) => !candidate.variableId && candidate.nodeId === nodeId && candidate.property === path);
@@ -536,6 +553,14 @@ export function StudioShell({ locale }: { locale: Locale }) {
   function applyTransformBatch(updates: Map<string, Partial<NodeTransform>>, properties: AnimatableProperty[], historyKey: string) {
     if (!updates.size) return;
     const next = deepClone(project);
+    if (activeVariantId === "base" && [...updates.keys()].some((nodeId) => {
+      const node = next.nodes.find((candidate) => candidate.id === nodeId);
+      const localMotionEdit = next.timeline.autoKey || properties.every((path) => next.timeline.tracks.some((track) => !track.variableId && track.nodeId === nodeId && track.property === path));
+      return Boolean(node?.instanceSourceId && !node.componentId && !localMotionEdit);
+    })) {
+      setNotice(t("Move or resize the instance root, or edit the main component for internal layers.", "Mueve o redimensiona la raíz de la instancia, o edita el componente principal para sus capas internas."));
+      return;
+    }
     const responsiveKeys = new Set<keyof NodeTransform>(["x", "y", "width", "height"]);
     const blocked = [...updates.keys()].some((nodeId) => properties.some((path) => {
       const track = next.timeline.tracks.find((candidate) => !candidate.variableId && candidate.nodeId === nodeId && candidate.property === path);
@@ -586,6 +611,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
   function updateResponsive(device: Device, override: ResponsiveOverride | null) {
     if (!selected) return;
     const source = structuralNodeMap.get(selected.id)!;
+    if (source.instanceSourceId && !source.componentId) { setNotice(t("Responsive overrides belong on the instance root or the main component.", "Los overrides responsivos pertenecen a la raíz de la instancia o al componente principal.")); return; }
     commit({ ...project, nodes: project.nodes.map((node) => node.id === selected.id ? { ...node, responsive: { ...source.responsive, [device]: override ?? {} } } : node) }, true, `responsive:${selected.id}:${device}`);
   }
 
@@ -619,6 +645,8 @@ export function StudioShell({ locale }: { locale: Locale }) {
 
   function deleteSelection() {
     if (!selectedIds.length) return;
+    const roots = selectedIds.filter((id) => !selectedIds.some((candidate) => candidate !== id && getDescendantIds(project.nodes, candidate).includes(id)));
+    if (roots.some((id) => { const node = structuralNodeMap.get(id); return Boolean(node?.instanceSourceId && !node.componentId); })) { setNotice(t("Delete the instance root, or edit the main component to remove an internal layer.", "Elimina la raíz de la instancia, o edita el componente principal para quitar una capa interna.")); return; }
     const ids = new Set(selectedIds.flatMap((id) => [id, ...getDescendantIds(project.nodes, id)]));
     project.nodes.forEach((node) => {
       if (node.instanceSourceId && ids.has(node.instanceSourceId)) [node.id, ...getDescendantIds(project.nodes, node.id)].forEach((id) => ids.add(id));
@@ -632,6 +660,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
   function duplicateSelection() {
     if (!selectedIds.length) return;
     const roots = selectedIds.filter((id) => !selectedIds.some((candidate) => getDescendantIds(project.nodes, candidate).includes(id)));
+    if (roots.some((id) => { const node = structuralNodeMap.get(id); return Boolean(node?.instanceSourceId && !node.componentId); })) { setNotice(t("Duplicate the whole instance, or edit the main component for internal layers.", "Duplica la instancia completa, o edita el componente principal para sus capas internas.")); return; }
     const allIds = roots.flatMap((id) => [id, ...getDescendantIds(project.nodes, id)]);
     const idMap = new Map(allIds.map((id) => [id, createId("clone")]));
     const instancedSources = new Map<string, ComponentDefinition>();
@@ -650,7 +679,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
         parentId: node.parentId && idMap.has(node.parentId) ? idMap.get(node.parentId)! : node.parentId,
         childIds: node.childIds.map((id) => idMap.get(id) ?? id),
         transform: roots.includes(node.id) ? { ...node.transform, x: node.transform.x + 24, y: node.transform.y + 24 } : node.transform,
-        ...(definition ? { componentId: isInstanceRoot ? definition.id : undefined, instanceSourceId: node.id, instanceOverrides: isInstanceRoot ? Object.fromEntries(definition.properties.map((property) => [property.id, property.defaultValue])) : {} } : {}),
+        ...(definition ? { componentId: isInstanceRoot ? definition.id : undefined, instanceSourceId: node.id, instanceOverrides: {} } : {}),
       };
     });
     let nodes = [...project.nodes, ...clones];
@@ -669,6 +698,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
   }
 
   function groupSelection(kind: "group" | "boolean" = "group", operation: BooleanOperation = "union") {
+    if (selectedIds.some((id) => { const node = structuralNodeMap.get(id); return Boolean(node?.instanceSourceId && !node.componentId); })) { setNotice(t("Internal instance layers inherit their structure from the main component.", "Las capas internas de una instancia heredan su estructura del componente principal.")); return; }
     const result = groupNodesInDocument(project, selectedIds, kind, operation);
     if (!result) { setNotice(t("Select layers with the same parent to group them", "Selecciona capas con el mismo padre para agruparlas")); return; }
     commit(result.document);
@@ -678,6 +708,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
   function ungroupSelection() {
     const groups = project.nodes.filter((node) => selectedIds.includes(node.id) && isContainer(node));
     if (!groups.length) return;
+    if (groups.some((group) => group.instanceSourceId)) { setNotice(t("A linked instance cannot be ungrouped. Edit its main component instead.", "Una instancia vinculada no se puede desagrupar. Edita su componente principal.")); return; }
     let nodes = deepClone(project.nodes);
     const nextSelection: string[] = [];
     groups.forEach((group) => {
@@ -697,6 +728,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
 
   function maskSelection() {
     if (selectedIds.length < 2) { setNotice(t("Select a mask and at least one content layer", "Selecciona una máscara y al menos una capa de contenido")); return; }
+    if (selectedIds.some((id) => structuralNodeMap.get(id)?.instanceSourceId)) { setNotice(t("Create the mask in the main component, or group detached layers.", "Crea la máscara en el componente principal, o agrupa capas independientes.")); return; }
     const mask = structuralNodeMap.get(selectedIds[0]);
     const result = groupNodesInDocument(project, selectedIds, "group");
     if (!mask || !result) return;
@@ -719,6 +751,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
     const dragged = structuralNodeMap.get(draggedId);
     const parent = parentId ? structuralNodeMap.get(parentId) : undefined;
     if (!dragged || (parentId && !isContainer(parent)) || dragged.parentId === parentId || getDescendantIds(project.nodes, draggedId).includes(parentId ?? "")) return;
+    if (dragged.instanceSourceId && !dragged.componentId) { setNotice(t("Internal instance layers follow the main component hierarchy.", "Las capas internas de una instancia siguen la jerarquía del componente principal.")); return; }
     const oldAbsolute = absolutePosition(project.nodes, draggedId);
     const parentAbsolute = parentId ? absolutePosition(project.nodes, parentId) : { x: 0, y: 0 };
     let nodes = deepClone(project.nodes);
@@ -752,6 +785,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
   function moveLayer(direction: -1 | 1) {
     if (!selected) return;
     const source = structuralNodeMap.get(selected.id)!;
+    if (source.instanceSourceId && !source.componentId) { setNotice(t("Reorder this layer in the main component.", "Reordena esta capa en el componente principal.")); return; }
     if (source.parentId) {
       const parent = structuralNodeMap.get(source.parentId)!;
       const index = parent.childIds.indexOf(source.id);
@@ -768,6 +802,13 @@ export function StudioShell({ locale }: { locale: Locale }) {
       order.set(roots[index].id, target); order.set(roots[target].id, index);
       commit({ ...project, nodes: [...project.nodes].sort((a, b) => (order.get(a.id) ?? project.nodes.indexOf(a) + 1000) - (order.get(b.id) ?? project.nodes.indexOf(b) + 1000)) });
     }
+  }
+
+  function toggleLayerVisibility(id: string) {
+    const node = structuralNodeMap.get(id);
+    if (!node) return;
+    if (node.instanceSourceId) { setNotice(t("Expose visibility as a component property, or change it on the main component.", "Expón la visibilidad como propiedad del componente, o cámbiala en el componente principal.")); return; }
+    commit({ ...project, nodes: project.nodes.map((candidate) => candidate.id === id ? { ...candidate, visible: !candidate.visible } : candidate) });
   }
 
   function loadTemplate(id: string) {
@@ -813,7 +854,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
       childIds: node.childIds.map((id) => idMap.get(id) ?? id),
       componentId: node.id === definition.rootNodeId ? definition.id : undefined,
       instanceSourceId: node.id,
-      instanceOverrides: node.id === definition.rootNodeId ? Object.fromEntries(definition.properties.map((property) => [property.id, property.defaultValue])) : {},
+      instanceOverrides: {},
       name: node.id === definition.rootNodeId ? `${definition.name} instance` : node.name,
       transform: node.id === definition.rootNodeId ? { ...node.transform, x: node.transform.x + 36, y: node.transform.y + 36 } : node.transform,
     }));
@@ -841,6 +882,21 @@ export function StudioShell({ locale }: { locale: Locale }) {
     if (interaction.action === "setVariable" && !project.variables.some((variable) => variable.id === interaction.variableId)) { setNotice(t("Choose a valid variable", "Elige una variable válida")); return; }
     if (interaction.action === "openUrl" && !/^(?:https?:\/\/|mailto:|tel:)\S+/i.test(interaction.url ?? "")) { setNotice(t("Enter a complete, supported URL", "Escribe una URL completa y compatible")); return; }
     commit({ ...project, interactions: [...project.interactions, interaction] });
+  }
+
+  function updateInteraction(id: string, patch: Partial<StudioInteraction>) {
+    const current = project.interactions.find((interaction) => interaction.id === id);
+    if (!current) return;
+    let updated = { ...current, ...patch };
+    if (updated.action === "changeVariant" || updated.action === "toggleVariant") {
+      const targets = ["base", ...project.variants.map((variant) => variant.id)].filter((variantId) => variantId !== updated.sourceVariantId);
+      if (!updated.targetVariantId || !targets.includes(updated.targetVariantId)) updated = { ...updated, targetVariantId: targets[0] };
+    }
+    if (updated.action === "setVariable" && !project.variables.some((variable) => variable.id === updated.variableId)) {
+      updated = { ...updated, variableId: project.variables[0]?.id, value: project.variables[0]?.value };
+    }
+    if (updated.action === "openUrl" && !updated.url) updated = { ...updated, url: "https://example.com" };
+    commit({ ...project, interactions: project.interactions.map((interaction) => interaction.id === id ? updated : interaction) }, true, `interaction:${id}:${Object.keys(patch).join("+")}`);
   }
 
   function updateComponentDefinition(componentId: string, patch: Partial<ComponentDefinition>) {
@@ -1024,10 +1080,11 @@ export function StudioShell({ locale }: { locale: Locale }) {
     try {
       const normalized = normalizeStudioDocument(JSON.parse(await file.text()));
       if (!normalized) throw new Error("Invalid Morphiq project");
+      const synchronized = synchronizeComponentInstances(normalized);
       setPast((current) => [...current, project].slice(-100));
-      setProject(normalized);
+      setProject(synchronized);
       setFuture([]);
-      setSelectedIds([normalized.nodes[0]?.id].filter(Boolean));
+      setSelectedIds([synchronized.nodes[0]?.id].filter(Boolean));
       setNotice(t("Project imported", "Proyecto importado"));
     } catch {
       setNotice(t("This file is not a valid Morphiq project", "Este archivo no es un proyecto Morphiq válido"));
@@ -1259,7 +1316,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
           <div className="v5-upload-row"><button onClick={() => imageInputRef.current?.click()} type="button"><Upload size={12} /> {t("Upload image", "Subir imagen")}</button><input accept="image/*" hidden onChange={(event) => addImage(event.target.files?.[0])} ref={imageInputRef} type="file" /></div>
           <PanelLabel>{t("Editable templates", "Plantillas editables")}<HelpButton label={t("Editable component templates", "Plantillas de componentes editables")} topic="studio" /></PanelLabel><div className="v5-template-list">{studioTemplates.map((template) => <button key={template.id} onClick={() => loadTemplate(template.id)} type="button"><i className={`v5-template-thumb v5-template-${template.family}`}><Sparkles size={13} /></i><span><b>{locale === "es" ? template.nameEs : template.name}</b><small>{locale === "es" ? template.descriptionEs : template.description}</small></span><ArrowLeft size={11} /></button>)}</div>
         </div>}
-        {leftTab === "layers" && <><StudioLayerTree locale={locale} nodes={project.nodes} onRename={(id, name) => commit({ ...project, nodes: project.nodes.map((node) => node.id === id ? { ...node, name } : node) })} onReparent={reparentNode} onSelect={selectLayer} onToggleExpanded={(id) => commit({ ...project, nodes: project.nodes.map((node) => node.id === id ? { ...node, expanded: !node.expanded } : node) })} onToggleLocked={(id) => commit({ ...project, nodes: project.nodes.map((node) => node.id === id ? { ...node, locked: !node.locked } : node) })} onToggleVisible={(id) => commit({ ...project, nodes: project.nodes.map((node) => node.id === id ? { ...node, visible: !node.visible } : node) })} search={search} selectedIds={selectedIds} /><div className="v5-layer-footer"><button aria-label={t("Move backward", "Enviar atrás")} disabled={!selected} onClick={() => moveLayer(-1)} type="button"><SendToBack size={12} /></button><button aria-label={t("Move forward", "Traer adelante")} disabled={!selected} onClick={() => moveLayer(1)} type="button"><BringToFront size={12} /></button><button disabled={selectedIds.length < 2} onClick={() => groupSelection()} type="button"><Group size={11} /> {t("Group", "Agrupar")}</button></div></>}
+        {leftTab === "layers" && <><StudioLayerTree locale={locale} nodes={project.nodes} onRename={(id, name) => commit({ ...project, nodes: project.nodes.map((node) => node.id === id ? { ...node, name } : node) })} onReparent={reparentNode} onSelect={selectLayer} onToggleExpanded={(id) => commit({ ...project, nodes: project.nodes.map((node) => node.id === id ? { ...node, expanded: !node.expanded } : node) })} onToggleLocked={(id) => commit({ ...project, nodes: project.nodes.map((node) => node.id === id ? { ...node, locked: !node.locked } : node) })} onToggleVisible={toggleLayerVisibility} search={search} selectedIds={selectedIds} /><div className="v5-layer-footer"><button aria-label={t("Move backward", "Enviar atrás")} disabled={!selected} onClick={() => moveLayer(-1)} type="button"><SendToBack size={12} /></button><button aria-label={t("Move forward", "Traer adelante")} disabled={!selected} onClick={() => moveLayer(1)} type="button"><BringToFront size={12} /></button><button disabled={selectedIds.length < 2} onClick={() => groupSelection()} type="button"><Group size={11} /> {t("Group", "Agrupar")}</button></div></>}
         {leftTab === "components" && <div className="v5-left-scroll"><PanelLabel>{t("Local components", "Componentes locales")}</PanelLabel>{project.components.length ? <div className="v5-local-components">{project.components.map((component) => <button key={component.id} onClick={() => instantiateComponent(component.id)} type="button"><Component size={15} /><span><b>{component.name}</b><small>{component.properties.length} {t("props", "props")} · {component.variantIds.length} {t("variants", "variantes")}</small></span><Plus size={11} /></button>)}</div> : <div className="v5-empty-component"><Component size={20} /><p>{t("Select one or more layers and create a reusable component from the right panel.", "Selecciona una o más capas y crea un componente reutilizable desde el panel derecho.")}</p></div>}</div>}
       </aside>
 
@@ -1285,7 +1342,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
 
       <aside className={`v5-right-panel ${inspectorMode === "basic" ? "v5-inspector-simple" : ""}`}>
         <div className="v5-selection-title">{selected ? <><div><b>{selected.name}</b><span>{locale === "es" ? primitiveLabelsEs[selected.kind] ?? selected.kind : selected.kind} · {activeVariantId === "base" ? "Base" : project.variants.find((variant) => variant.id === activeVariantId)?.name}</span></div><button aria-label={selected.locked ? t("Unlock", "Desbloquear") : t("Lock", "Bloquear")} onClick={() => commit({ ...project, nodes: project.nodes.map((node) => node.id === selected.id ? { ...node, locked: !node.locked } : node) })} type="button"><Lock size={11} /></button></> : <span>{t("No selection", "Sin selección")}</span>}</div>
-        {selected && <div className={`v5-edit-context ${activeVariantId !== "base" ? "variant" : project.timeline.tracks.some((track) => track.nodeId === selected.id) ? "motion" : "base"}`}><span>{activeVariantId !== "base" ? t("Editing this state only", "Editando solo este estado") : project.timeline.tracks.some((track) => track.nodeId === selected.id) ? project.timeline.autoKey ? t("Animation edit · Auto-key on", "Edición de animación · Auto-key activo") : t("Animated layer · edit at a keyframe", "Capa animada · edita en un keyframe") : project.canvas.device !== "desktop" ? t(`Base + ${project.canvas.device} responsive view`, `Base + vista responsiva ${project.canvas.device}`) : t("Editing base layer", "Editando capa base")}</span><HelpButton label={t("Current editing context", "Contexto de edición actual")} topic={activeVariantId !== "base" ? "inspector.interactions" : project.timeline.tracks.some((track) => track.nodeId === selected.id) ? "timeline.keyframes" : "inspector.design"} /></div>}
+        {selected && <div className={`v5-edit-context ${activeVariantId !== "base" ? "variant" : selected.instanceSourceId ? "instance" : project.timeline.tracks.some((track) => track.nodeId === selected.id) ? "motion" : "base"}`}><span>{activeVariantId !== "base" ? t("Editing this state only", "Editando solo este estado") : selected.instanceSourceId ? t("Linked instance · use exposed properties", "Instancia vinculada · usa propiedades expuestas") : project.timeline.tracks.some((track) => track.nodeId === selected.id) ? project.timeline.autoKey ? t("Animation edit · Auto-key on", "Edición de animación · Auto-key activo") : t("Animated layer · edit at a keyframe", "Capa animada · edita en un keyframe") : project.canvas.device !== "desktop" ? t(`Base + ${project.canvas.device} responsive view`, `Base + vista responsiva ${project.canvas.device}`) : t("Editing base layer", "Editando capa base")}</span><HelpButton label={t("Current editing context", "Contexto de edición actual")} topic={activeVariantId !== "base" ? "inspector.interactions" : project.timeline.tracks.some((track) => track.nodeId === selected.id) ? "timeline.keyframes" : "inspector.design"} /></div>}
         <div className="v5-inspector-tabs" role="tablist">{(["design", "material", "layout", "component", "interactions", "accessibility"] as InspectorTab[]).map((tab) => { const label = locale === "es" ? ({ design: "Diseño", material: "Material", layout: "Layout", component: "Componente", interactions: "Interacciones", accessibility: "Accesibilidad" } as Record<InspectorTab, string>)[tab] : tab; return <button aria-label={label} aria-selected={inspectorTab === tab} key={tab} onClick={() => setInspectorTab(tab)} role="tab" title={label} type="button">{tab === "design" ? <Maximize2 size={12} /> : tab === "material" ? <WandSparkles size={12} /> : tab === "layout" ? <Frame size={12} /> : tab === "component" ? <Component size={12} /> : tab === "interactions" ? <Play size={12} /> : <Check size={12} />}<span>{label}</span></button>; })}</div>
         <div className="v5-inspector-mode-switch"><span>{t("Inspector detail", "Detalle del inspector")}</span><div><button aria-pressed={inspectorMode === "basic"} onClick={() => setInspectorMode("basic")} type="button">{t("Essential", "Esencial")}</button><button aria-pressed={inspectorMode === "advanced"} onClick={() => setInspectorMode("advanced")} type="button">{t("Advanced", "Avanzado")}</button></div><HelpButton label={t("Essential and advanced inspector modes", "Modos esencial y avanzado del inspector")} topic="studio" /></div>
         <div className="v5-inspector-scroll">{selected ? <StudioInspector
@@ -1306,10 +1363,11 @@ export function StudioShell({ locale }: { locale: Locale }) {
           onDeleteVariant={deleteVariant}
           onGeometry={updateGeometry}
           onInstanceOverrides={(rootNodeId, instanceOverrides) => commit({ ...project, nodes: project.nodes.map((node) => node.id === rootNodeId ? { ...node, instanceOverrides } : node) })}
-          onInteraction={(id, patch) => commit({ ...project, interactions: project.interactions.map((interaction) => interaction.id === id ? { ...interaction, ...patch } : interaction) })}
+          onInteraction={updateInteraction}
           onLayout={updateLayout}
           onNode={updateNode}
           onResponsive={updateResponsive}
+          onSelectNode={(id) => { setSelectedIds([id]); setInspectorTab("component"); }}
           onSetVariant={(id) => { setPlaying(false); setPlayhead(project.timeline.workArea[0]); setActiveVariantId(id); }}
           onStyle={updateStyle}
           onSurface={(node) => applyNodeMutation(node.id, { surface: node.surface, geometry: node.geometry, style: node.style })}
@@ -1324,7 +1382,15 @@ export function StudioShell({ locale }: { locale: Locale }) {
     </section>
 
     <button aria-label={timelineOpen ? t("Hide timeline", "Ocultar línea de tiempo") : t("Show timeline", "Mostrar línea de tiempo")} className="v5-timeline-toggle" onClick={() => setTimelineOpen((value) => !value)} type="button">{timelineOpen ? <PanelBottomClose size={13} /> : <PanelBottomOpen size={13} />}<span>{t("Timeline", "Línea de tiempo")}</span></button>
-    {timelineOpen && <StudioTimelinePanel locale={locale} nodes={resolvedNodes} onPlayhead={(value) => { setActiveVariantId("base"); setPlayhead(value); }} onPlaying={(value) => { if (value) setActiveVariantId("base"); setPlaying(value); }} onSelectKeyframes={setSelectedKeyframeIds} onSelectNode={(id) => setSelectedIds([id])} onTimeline={(timeline, historyGroup) => commit({ ...project, timeline }, true, historyGroup)} playhead={playhead} playing={playing} selectedKeyframeIds={selectedKeyframeIds} selectedNodeIds={selectedIds} timeline={project.timeline} variables={resolvedVariables} />}
+    {timelineOpen && <StudioTimelinePanel locale={locale} nodes={resolvedNodes} onPlayhead={(value) => { setActiveVariantId("base"); setPlayhead(value); }} onPlaying={(value) => {
+      if (value) {
+        setActiveVariantId("base");
+        const [workStart, workEnd] = project.timeline.workArea;
+        if (project.timeline.direction === "reverse" && playhead <= workStart + .001) setPlayhead(workEnd);
+        if (project.timeline.direction !== "reverse" && playhead >= workEnd - .001) setPlayhead(workStart);
+      }
+      setPlaying(value);
+    }} onSelectKeyframes={setSelectedKeyframeIds} onSelectNode={(id) => setSelectedIds([id])} onTimeline={(timeline, historyGroup) => commit({ ...project, timeline }, true, historyGroup)} playhead={playhead} playing={playing} selectedKeyframeIds={selectedKeyframeIds} selectedNodeIds={selectedIds} timeline={project.timeline} variables={resolvedVariables} />}
 
     {showExport && <div className="v5-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowExport(false); }}><dialog aria-labelledby="v5-export-title" className="v5-export-dialog" onCancel={() => setShowExport(false)} open><header><div><span>MORPHIQ EXPORT</span><h2 id="v5-export-title">{project.name}</h2></div><button aria-label={t("Close", "Cerrar")} onClick={() => setShowExport(false)} type="button">×</button></header><div aria-label={t("Export format", "Formato de exportación")} className="v5-export-tabs" role="tablist">{(["react", "css", "html", "svg", "ai", "json"] as ExportTab[]).map((tab) => <button aria-selected={exportTab === tab} key={tab} onClick={() => setExportTab(tab)} role="tab" type="button">{tab}</button>)}</div><pre><code>{exportContent}</code></pre><footer><span>{t("Includes hierarchy, materials, responsive rules, variants, motion and reduced-motion fallback.", "Incluye jerarquía, materiales, responsive, variantes, movimiento y alternativa de movimiento reducido.")}</span><div><button onClick={() => void copyExport()} type="button">{copied ? <Check size={12} /> : <Copy size={12} />} {copied ? t("Copied", "Copiado") : t("Copy", "Copiar")}</button><button onClick={() => { const extensions: Record<ExportTab, string> = { react: "tsx", css: "css", html: "html", svg: "svg", ai: "txt", json: "json" }; downloadFile(`${project.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.${extensions[exportTab]}`, exportContent, exportTab === "svg" ? "image/svg+xml" : "text/plain"); }} type="button"><Download size={12} /> {t("Download", "Descargar")}</button><button onClick={() => exportDocument(project)} type="button"><FileJson size={12} /> {t("Project", "Proyecto")}</button></div></footer></dialog></div>}
     {notice && <div className="v5-notice"><Check size={12} />{notice}</div>}

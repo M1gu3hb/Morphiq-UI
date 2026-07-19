@@ -26,6 +26,7 @@ import {
   createGradientStop,
   createId,
   createPaint,
+  getPathValue,
   type AccessibilitySettings,
   type AnimatableProperty,
   type BlendMode,
@@ -82,6 +83,7 @@ export type StudioInspectorProps = {
   onLayout: (patch: Partial<NodeLayout>) => void;
   onNode: (patch: Partial<StudioNode>, property?: AnimatableProperty) => void;
   onResponsive: (device: Device, patch: ResponsiveOverride | null) => void;
+  onSelectNode: (id: string) => void;
   onSetVariant: (id: string) => void;
   onStyle: (patch: Partial<NodeStyle>, property?: AnimatableProperty) => void;
   onSurface: (node: StudioNode) => void;
@@ -297,7 +299,7 @@ function LayoutInspector({ device, locale, node, onLayout, onResponsive }: Studi
   </>;
 }
 
-function ComponentInspector({ document, locale, node, onAddComponentProperty, onAddVariable, onBindVariable, onComponentDefinition, onCreateComponent, onDeleteVariable, onInstanceOverrides, onVariable }: StudioInspectorProps) {
+function ComponentInspector({ document, locale, node, onAddComponentProperty, onAddVariable, onBindVariable, onComponentDefinition, onCreateComponent, onDeleteVariable, onInstanceOverrides, onSelectNode, onVariable }: StudioInspectorProps) {
   const t = (en: string, es: string) => tr(locale, en, es);
   let componentOwner: StudioNode | undefined = node;
   while (componentOwner && !componentOwner.componentId) componentOwner = componentOwner.parentId ? document.nodes.find((candidate) => candidate.id === componentOwner!.parentId) : undefined;
@@ -334,11 +336,13 @@ function ComponentInspector({ document, locale, node, onAddComponentProperty, on
   };
   return <>
     <Section title={t("Reusable component", "Componente reutilizable")}>
-      {definition ? <><div className="v5-component-summary"><Component size={17} /><div><b>{definition.name}</b><span>{isInstance ? t("Editable instance", "Instancia editable") : t("Main component", "Componente principal")} · {definition.properties.length} {t("exposed properties", "propiedades expuestas")}</span></div></div>{!isInstance && <><TextField label={t("Component name", "Nombre del componente")} onChange={(name) => onComponentDefinition(definition.id, { name })} value={definition.name} /><TextArea label={t("Description", "Descripción")} onChange={(description) => onComponentDefinition(definition.id, { description })} value={definition.description} /></>}</> : <><p className="v5-inspector-help">{t("Turn the selection into a reusable component. Its children, variants and interactions stay attached.", "Convierte la selección en un componente reutilizable. Sus hijos, variantes e interacciones permanecen ligados.")}</p><button className="v5-wide-button" onClick={onCreateComponent} type="button"><Component size={12} /> {t("Create component", "Crear componente")}</button></>}
+      {definition ? <><div className="v5-component-summary"><Component size={17} /><div><b>{definition.name}</b><span>{isInstance ? t("Linked instance", "Instancia vinculada") : t("Main component", "Componente principal")} · {definition.properties.length} {t("exposed properties", "propiedades expuestas")}</span></div></div>{isInstance ? <><p className="v5-inspector-help">{t("This instance inherits its main component. Use the exposed controls below for local changes; edit the main component to change every instance.", "Esta instancia hereda de su componente principal. Usa los controles expuestos para cambios locales; edita el componente principal para cambiar todas las instancias.")}</p><button className="v5-wide-button" onClick={() => onSelectNode(definition.rootNodeId)} type="button"><Component size={12} /> {t("Select main component", "Seleccionar componente principal")}</button></> : <><TextField label={t("Component name", "Nombre del componente")} onChange={(name) => onComponentDefinition(definition.id, { name })} value={definition.name} /><TextArea label={t("Description", "Descripción")} onChange={(description) => onComponentDefinition(definition.id, { description })} value={definition.description} /></>}</> : <><p className="v5-inspector-help">{t("Turn the selection into a reusable component. Its children, variants and interactions stay attached.", "Convierte la selección en un componente reutilizable. Sus hijos, variantes e interacciones permanecen ligados.")}</p><button className="v5-wide-button" onClick={onCreateComponent} type="button"><Component size={12} /> {t("Create component", "Crear componente")}</button></>}
     </Section>
     {definition && <Section title={isInstance ? t("Instance properties", "Propiedades de instancia") : t("Exposed properties", "Propiedades expuestas")}>
       {isInstance ? <div className="v5-instance-properties">{definition.properties.map((property) => {
-        const value = instanceOverrides[property.id] ?? property.defaultValue;
+        const inheritedTarget = document.nodes.find((candidate) => candidate.id === property.targetNodeId);
+        const inheritedValue = inheritedTarget ? getPathValue(inheritedTarget, property.targetPath as AnimatableProperty) : property.defaultValue;
+        const value = Object.hasOwn(instanceOverrides, property.id) ? instanceOverrides[property.id] : inheritedValue;
         const setValue = (next: string | number | boolean) => componentOwner && onInstanceOverrides(componentOwner.id, { ...instanceOverrides, [property.id]: next });
         if (property.type === "boolean") return <ToggleField checked={Boolean(value)} key={property.id} label={property.name} onChange={setValue} />;
         if (property.type === "number") return <NumberField key={property.id} label={property.name} onChange={setValue} value={Number(value)} />;
@@ -362,15 +366,16 @@ function ComponentInspector({ document, locale, node, onAddComponentProperty, on
       {!canAddVariable && <p className="v5-inline-warning">{t("Use a unique, non-empty variable name.", "Usa un nombre de variable único y no vacío.")}</p>}
       <button className="v5-wide-button" disabled={!canAddVariable} onClick={() => { const defaultValue = variableType === "color" ? "#ff8068" : variableType === "number" ? 0 : variableType === "boolean" ? false : "Text"; onAddVariable({ id: createId("variable"), name: variableName.trim(), type: variableType, value: defaultValue, defaultValue }); }} type="button"><Plus size={12} /> {t("Add variable", "Agregar variable")}</button>
     </Section>
-    <Section title={t("Variable bindings", "Enlaces de variables")}>
+    {!isInstance && <Section title={t("Variable bindings", "Enlaces de variables")}>
       {["text", "secondaryText", "visible", "checked", "value", "style.fills.0.color", "style.fills.0.imageUrl", "style.typography.color", "transform.width", "transform.height"].map((path) => <label className="v5-bind-row" key={path}><span>{path}</span><select onChange={(event) => onBindVariable(path, event.target.value)} value={node.bindings[path] ?? ""}><option value="">—</option>{compatibleVariables(path).map((variable) => <option key={variable.id} value={variable.id}>{variable.name}</option>)}</select></label>)}
-    </Section>
+    </Section>}
   </>;
 }
 
 function InteractionsInspector({ activeVariantId, document, locale, node, onAddInteraction, onDeleteInteraction, onDeleteVariant, onInteraction, onSetVariant, onUpsertVariant }: StudioInspectorProps) {
   const t = (en: string, es: string) => tr(locale, en, es);
   const interactions = document.interactions.filter((interaction) => interaction.sourceNodeId === node.id);
+  const inheritedInteractions = node.instanceSourceId ? document.interactions.filter((interaction) => interaction.sourceNodeId === node.instanceSourceId) : [];
   const [trigger, setTrigger] = useState<TriggerType>("click");
   const [action, setAction] = useState<StudioInteraction["action"]>("changeVariant");
   const [targetVariantId, setTargetVariantId] = useState(document.variants.find((variant) => variant.id !== activeVariantId)?.id ?? (activeVariantId === "base" ? document.variants[0]?.id ?? "" : "base"));
@@ -415,6 +420,7 @@ function InteractionsInspector({ activeVariantId, document, locale, node, onAddI
       <p className="v5-inspector-help">{t("Edit the selected variant directly on the canvas. Base geometry stays untouched.", "Edita la variante seleccionada directamente en el lienzo. La geometría base permanece intacta.")}</p>
     </Section>
     <Section actions={<button aria-label={t("Add configured interaction", "Agregar interacción configurada")} disabled={!canAddInteraction} onClick={() => onAddInteraction({ id: createId("interaction"), sourceNodeId: node.id, sourceVariantId: activeVariantId, trigger, action, targetVariantId: actionNeedsVariant ? effectiveTargetVariantId : undefined, variableId: actionNeedsVariable ? document.variables[0]?.id : undefined, value: actionNeedsVariable ? document.variables[0]?.value : undefined, url: actionNeedsUrl ? newUrl.trim() : undefined, delay: 0, key: "Enter", transition: "smart", duration: 0.35, easing: "easeInOut" })} type="button"><Plus size={12} /></button>} title={t("Prototype connections", "Conexiones de prototipo")}>
+      {inheritedInteractions.length > 0 && <p className="v5-inspector-help">{t(`This instance also inherits ${inheritedInteractions.length} interaction(s) from its main component.`, `Esta instancia también hereda ${inheritedInteractions.length} interacción(es) de su componente principal.`)}</p>}
       <SelectField<TriggerType> label={t("Trigger", "Disparador")} onChange={setTrigger} options={["click", "doubleClick", "hover", "hoverEnd", "focus", "blur", "mouseDown", "mouseUp", "drag", "swipe", "scroll", "key", "load", "delay", "variable"]} value={trigger} />
       <SelectField label={t("Action", "Acción")} onChange={setAction} options={["changeVariant", "toggleVariant", "setVariable", "playTimeline", "pauseTimeline", "reverseTimeline", "openUrl"] as const} value={action} />
       {actionNeedsVariant && <SelectField label={t("Target state (must be different)", "Estado destino (debe ser diferente)")} onChange={setTargetVariantId} options={targetVariantIds} render={variantLabel} value={effectiveTargetVariantId} />}
@@ -427,17 +433,26 @@ function InteractionsInspector({ activeVariantId, document, locale, node, onAddI
         <SelectField label={t("Trigger", "Disparador")} onChange={(nextTrigger) => onInteraction(interaction.id, { trigger: nextTrigger })} options={["click", "doubleClick", "hover", "hoverEnd", "focus", "blur", "mouseDown", "mouseUp", "drag", "swipe", "scroll", "key", "load", "delay", "variable"] as const} value={interaction.trigger} />
         {interaction.trigger === "key" && <TextField label={t("Keyboard key", "Tecla")} onChange={(key) => onInteraction(interaction.id, { key })} value={interaction.key} />}
         <SelectField label={t("Action", "Acción")} onChange={(action) => onInteraction(interaction.id, { action })} options={["changeVariant", "toggleVariant", "setVariable", "playTimeline", "pauseTimeline", "reverseTimeline", "openUrl"] as const} value={interaction.action} />
-        {(interaction.action === "changeVariant" || interaction.action === "toggleVariant") && <SelectField label={t("Target variant", "Variante destino")} onChange={(target) => onInteraction(interaction.id, { targetVariantId: target })} options={variantIds} render={variantLabel} value={interaction.targetVariantId ?? "base"} />}
+        {(interaction.action === "changeVariant" || interaction.action === "toggleVariant") && <SelectField label={t("Target variant", "Variante destino")} onChange={(target) => onInteraction(interaction.id, { targetVariantId: target })} options={variantIds.filter((id) => id !== interaction.sourceVariantId)} render={variantLabel} value={variantIds.filter((id) => id !== interaction.sourceVariantId).includes(interaction.targetVariantId ?? "") ? interaction.targetVariantId! : variantIds.filter((id) => id !== interaction.sourceVariantId)[0] ?? ""} />}
         {interaction.action === "setVariable" && <><SelectField label={t("Variable", "Variable")} onChange={(variableId) => onInteraction(interaction.id, { variableId })} options={document.variables.map((variable) => variable.id)} render={(id) => document.variables.find((variable) => variable.id === id)?.name ?? id} value={interaction.variableId ?? document.variables[0]?.id ?? ""} /><TextField label={t("Value or expression", "Valor o expresión")} onChange={(value) => onInteraction(interaction.id, { value })} value={String(interaction.value ?? "")} /></>}
         {interaction.action === "openUrl" && <TextField label="URL" onChange={(url) => onInteraction(interaction.id, { url })} value={interaction.url ?? ""} />}
         <SelectField label={t("Transition", "Transición")} onChange={(transition) => onInteraction(interaction.id, { transition })} options={["smart", "instant", "dissolve"] as const} value={interaction.transition} />
         <SelectField label={t("Easing", "Curva")} onChange={(easing) => onInteraction(interaction.id, { easing })} options={["linear", "easeIn", "easeOut", "easeInOut", "cubicBezier", "spring"] as const} value={interaction.easing} />
         <Grid columns={2}><NumberField label={t("Duration", "Duración")} min={0} onChange={(duration) => onInteraction(interaction.id, { duration })} step={0.05} value={interaction.duration} suffix="s" /><NumberField label={t("Delay", "Retraso")} min={0} onChange={(delay) => onInteraction(interaction.id, { delay })} step={0.05} value={interaction.delay} suffix="s" /></Grid>
-        {interaction.condition ? <div className="v5-condition-editor"><SelectField label={t("If variable", "Si la variable")} onChange={(variableId) => onInteraction(interaction.id, { condition: { ...interaction.condition!, variableId } })} options={document.variables.map((variable) => variable.id)} render={(id) => document.variables.find((variable) => variable.id === id)?.name ?? id} value={interaction.condition.variableId} /><SelectField label={t("Operator", "Operador")} onChange={(operator) => onInteraction(interaction.id, { condition: { ...interaction.condition!, operator } })} options={["equals", "notEquals", "greater", "less"] as const} value={interaction.condition.operator} /><TextField label={t("Compare with", "Comparar con")} onChange={(value) => onInteraction(interaction.id, { condition: { ...interaction.condition!, value } })} value={String(interaction.condition.value)} /><button onClick={() => onInteraction(interaction.id, { condition: undefined })} type="button"><Trash2 size={10} /> {t("Remove condition", "Eliminar condición")}</button></div> : <button className="v5-wide-button" disabled={!document.variables.length} onClick={() => onInteraction(interaction.id, { condition: { variableId: document.variables[0].id, operator: "equals", value: document.variables[0].value } })} type="button"><Plus size={10} /> {t("Add condition", "Agregar condición")}</button>}
+        {interaction.condition ? <div className="v5-condition-editor"><SelectField label={t("If variable", "Si la variable")} onChange={(variableId) => { const variable = document.variables.find((candidate) => candidate.id === variableId); onInteraction(interaction.id, { condition: { ...interaction.condition!, variableId, value: variable?.value ?? "" } }); }} options={document.variables.map((variable) => variable.id)} render={(id) => document.variables.find((variable) => variable.id === id)?.name ?? id} value={interaction.condition.variableId} /><SelectField label={t("Operator", "Operador")} onChange={(operator) => onInteraction(interaction.id, { condition: { ...interaction.condition!, operator } })} options={["equals", "notEquals", "greater", "less"] as const} value={interaction.condition.operator} /><InteractionConditionValue condition={interaction.condition} document={document} locale={locale} onChange={(value) => onInteraction(interaction.id, { condition: { ...interaction.condition!, value } })} /><button onClick={() => onInteraction(interaction.id, { condition: undefined })} type="button"><Trash2 size={10} /> {t("Remove condition", "Eliminar condición")}</button></div> : <button className="v5-wide-button" disabled={!document.variables.length} onClick={() => onInteraction(interaction.id, { condition: { variableId: document.variables[0].id, operator: "equals", value: document.variables[0].value } })} type="button"><Plus size={10} /> {t("Add condition", "Agregar condición")}</button>}
       </div>)}</div>
       {!interactions.length && <p className="v5-inspector-help">{t("Create multiple actions with the same trigger to run them together.", "Crea varias acciones con el mismo disparador para ejecutarlas juntas.")}</p>}
     </Section>
   </>;
+}
+
+function InteractionConditionValue({ condition, document, locale, onChange }: { condition: NonNullable<StudioInteraction["condition"]>; document: StudioDocument; locale: Locale; onChange: (value: string | number | boolean) => void }) {
+  const variable = document.variables.find((candidate) => candidate.id === condition.variableId);
+  const label = tr(locale, "Compare with", "Comparar con");
+  if (variable?.type === "boolean") return <ToggleField checked={Boolean(condition.value)} label={label} onChange={onChange} />;
+  if (variable?.type === "number") return <NumberField label={label} onChange={onChange} value={Number(condition.value)} />;
+  if (variable?.type === "color") return <ColorField label={label} onChange={onChange} value={String(condition.value)} />;
+  return <TextField label={label} onChange={onChange} value={String(condition.value)} />;
 }
 
 function AccessibilityInspector({ locale, node, onAccessibility }: StudioInspectorProps) {

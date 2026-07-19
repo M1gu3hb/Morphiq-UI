@@ -51,3 +51,25 @@ bundled transitively by Next.js. The npm advisory has no available package fix a
 checkpoint. Morphiq does not pass community-authored CSS through that build-time
 stringifier; nevertheless, the finding remains tracked and Next.js should be upgraded
 as soon as its dependency graph contains the patched PostCSS release.
+
+## Coherence hardening audit
+
+The July 2026 audit added regression coverage for behavioral paths that structural
+counts alone could not verify:
+
+- component instances now inherit source hierarchy, responsive child rules, variants,
+  interactions, and motion while preserving deliberate local overrides;
+- adding, removing, grouping, or reparenting a main-component layer synchronizes every
+  linked instance and removes stale animation/prototype references;
+- invalid structural edits on internal instance layers are stopped with an actionable
+  explanation instead of appearing to work and then silently reverting;
+- direct instance motion wins over inherited motion for the same property in Studio,
+  React runtime output, and generated CSS;
+- responsive variant CSS is resolved in the same order as the live canvas, including
+  constraints that depend on a variant-modified parent;
+- non-looping alternate playback completes both the forward and return legs consistently
+  in the editor and exported code;
+- new instances no longer mark inherited property defaults as local overrides;
+- interaction edits retain a valid target state/variable and condition values keep the
+  selected variable's actual type;
+- multi-keyframe drag selection and play-from-boundary behavior are deterministic.

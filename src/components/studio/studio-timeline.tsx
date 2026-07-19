@@ -199,17 +199,13 @@ export function StudioTimelinePanel(props: TimelineProps) {
     onTimeline({ ...timeline, tracks: timeline.tracks.map((track) => ({ ...track, keyframes: track.keyframes.map((frame) => frame.id === id ? { ...frame, ...patch, spring: patch.spring ? { ...frame.spring, ...patch.spring } : frame.spring } : frame).sort((a, b) => a.time - b.time) })) }, `timeline:keyframe:${id}`);
   }
 
-  function selectFrame(event: PointerEvent, id: string) {
+  function beginFrameDrag(event: PointerEvent<HTMLButtonElement>, id: string) {
     event.stopPropagation();
     const additive = event.metaKey || event.ctrlKey || event.shiftKey;
-    const ids = additive ? new Set(selectedKeyframeIds) : new Set<string>();
-    if (ids.has(id) && additive) ids.delete(id); else ids.add(id);
+    const ids = additive ? new Set(selectedKeyframeIds) : selectedKeyframeIds.has(id) ? new Set(selectedKeyframeIds) : new Set<string>();
+    if (additive && ids.has(id)) ids.delete(id); else ids.add(id);
     onSelectKeyframes(ids);
-  }
-
-  function beginFrameDrag(event: PointerEvent<HTMLButtonElement>, id: string) {
-    selectFrame(event, id);
-    const ids = selectedKeyframeIds.has(id) ? new Set(selectedKeyframeIds) : new Set([id]);
+    if (!ids.size) return;
     const startX = event.clientX;
     const source = structuredClone(timeline);
     const move = (pointer: globalThis.PointerEvent) => onTimeline(moveKeyframes(source, ids, (pointer.clientX - startX) / trackWidth * timeline.duration), "timeline:move-keyframes");

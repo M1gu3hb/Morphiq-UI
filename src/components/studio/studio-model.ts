@@ -796,6 +796,63 @@ export function getDescendantIds(nodes: StudioNode[], nodeId: string): string[] 
   return children.flatMap((child) => [child.id, ...getDescendantIds(nodes, child.id)]);
 }
 
+export function synchronizeComponentInstances(document: StudioDocument): StudioDocument {
+  let nodes = document.nodes;
+  const removedIds = new Set<string>();
+
+  for (const component of document.components) {
+    const sourceRoot = nodes.find((node) => node.id === component.rootNodeId && !node.instanceSourceId);
+    if (!sourceRoot) continue;
+    const sourceIds = [sourceRoot.id, ...getDescendantIds(nodes, sourceRoot.id)];
+    const sourceIdSet = new Set(sourceIds);
+    const instances = nodes.filter((node) => node.componentId === component.id && node.instanceSourceId === sourceRoot.id && node.id !== sourceRoot.id);
+
+    for (const instanceRoot of instances) {
+      const existingIds = new Set([instanceRoot.id, ...getDescendantIds(nodes, instanceRoot.id)]);
+      const existingBySource = new Map(nodes.filter((node) => existingIds.has(node.id) && node.instanceSourceId).map((node) => [node.instanceSourceId!, node]));
+      const idMap = new Map(sourceIds.map((sourceId) => [sourceId, existingBySource.get(sourceId)?.id ?? createId("instance")]));
+      const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+      const synchronized = sourceIds.map((sourceId) => {
+        const source = nodeMap.get(sourceId)!;
+        const current = existingBySource.get(sourceId);
+        const isRoot = sourceId === sourceRoot.id;
+        const localChildren = (current?.childIds ?? []).filter((childId) => {
+          const child = nodeMap.get(childId);
+          return child && (!child.instanceSourceId || !sourceIdSet.has(child.instanceSourceId));
+        });
+        return {
+          ...structuredClone(source),
+          id: idMap.get(sourceId)!,
+          parentId: isRoot ? instanceRoot.parentId : source.parentId ? idMap.get(source.parentId) ?? null : instanceRoot.id,
+          childIds: [...source.childIds.map((childId) => idMap.get(childId)).filter((id): id is string => Boolean(id)), ...localChildren],
+          name: current?.name ?? (isRoot ? `${component.name} instance` : source.name),
+          locked: current?.locked ?? false,
+          expanded: current?.expanded ?? source.expanded,
+          componentId: isRoot ? component.id : undefined,
+          instanceSourceId: source.id,
+          instanceOverrides: isRoot ? instanceRoot.instanceOverrides : {},
+          transform: isRoot ? instanceRoot.transform : source.transform,
+          responsive: isRoot ? instanceRoot.responsive : source.responsive,
+        } satisfies StudioNode;
+      });
+
+      existingBySource.forEach((node, sourceId) => { if (!sourceIdSet.has(sourceId)) removedIds.add(node.id); });
+      const synchronizedById = new Map(synchronized.map((node) => [node.id, node]));
+      const existingNodeIds = new Set(nodes.map((node) => node.id));
+      nodes = [...nodes.map((node) => synchronizedById.get(node.id) ?? node), ...synchronized.filter((node) => !existingNodeIds.has(node.id))];
+    }
+  }
+
+  if (removedIds.size) nodes = nodes.filter((node) => !removedIds.has(node.id)).map((node) => ({ ...node, childIds: node.childIds.filter((id) => !removedIds.has(id)) }));
+  return {
+    ...document,
+    nodes,
+    variants: document.variants.map((variant) => ({ ...variant, overrides: Object.fromEntries(Object.entries(variant.overrides).filter(([nodeId]) => !removedIds.has(nodeId))) })),
+    interactions: document.interactions.filter((interaction) => !removedIds.has(interaction.sourceNodeId)),
+    timeline: { ...document.timeline, tracks: document.timeline.tracks.filter((track) => !removedIds.has(track.nodeId)) },
+  };
+}
+
 export function isContainer(node: StudioNode | null | undefined) {
   return node?.kind === "frame" || node?.kind === "group" || node?.kind === "boolean";
 }

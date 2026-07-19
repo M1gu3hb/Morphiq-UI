@@ -56,7 +56,7 @@ function materializeComponentInstances(document: StudioDocument): StudioDocument
       instanceSourceId: source.instanceSourceId,
       instanceOverrides: source.instanceOverrides,
       transform: source.componentId ? source.transform : blueprint.transform,
-      responsive: source.responsive,
+      responsive: source.componentId ? source.responsive : blueprint.responsive,
     };
   });
   nodes = nodes.map((node) => {
@@ -181,8 +181,17 @@ function nodeMotionKey(node: StudioNode, path: string) {
   return `${node.id}:${path}`;
 }
 
+function tracksForNode(document: StudioDocument, node: StudioNode) {
+  const tracks = new Map<string, StudioDocument["timeline"]["tracks"][number]>();
+  if (node.instanceSourceId) {
+    document.timeline.tracks.filter((track) => track.nodeId === node.instanceSourceId).forEach((track) => tracks.set(track.property, track));
+  }
+  document.timeline.tracks.filter((track) => track.nodeId === node.id).forEach((track) => tracks.set(track.property, track));
+  return [...tracks.values()];
+}
+
 function hasNodeMotionTrack(document: StudioDocument, node: StudioNode, path: string) {
-  return document.timeline.tracks.some((track) => track.enabled && track.property === path && (track.nodeId === node.id || track.nodeId === node.instanceSourceId));
+  return tracksForNode(document, node).some((track) => track.enabled && track.property === path);
 }
 
 function motionNumberExpression(document: StudioDocument, node: StudioNode, path: AnimatableProperty, fallback: number) {
@@ -473,7 +482,7 @@ function nodeContentRules(node: StudioNode) {
 
 function animatedNodeAtTime(document: StudioDocument, node: StudioNode, time: number) {
   let result = node;
-  document.timeline.tracks.filter((track) => track.nodeId === node.id || track.nodeId === node.instanceSourceId).forEach((track) => {
+  tracksForNode(document, node).forEach((track) => {
     const value = valueAtTime(track, time);
     if (value !== undefined) result = setPathValue(result, track.property, value);
   });
@@ -481,7 +490,7 @@ function animatedNodeAtTime(document: StudioDocument, node: StudioNode, time: nu
 }
 
 function animationCss(document: StudioDocument, node: StudioNode) {
-  const tracks = document.timeline.tracks.filter((track) => (track.nodeId === node.id || track.nodeId === node.instanceSourceId) && track.enabled && track.keyframes.length);
+  const tracks = tracksForNode(document, node).filter((track) => track.enabled && track.keyframes.length);
   if (!tracks.length) return "";
   const [workStart, workEnd] = document.timeline.workArea;
   const workLength = Math.max(.001, workEnd - workStart);
@@ -497,16 +506,24 @@ function animationCss(document: StudioDocument, node: StudioNode) {
     return `  ${((time - workStart) / workLength * 100).toFixed(3)}% { width: ${current.transform.width}px; height: ${current.transform.height}px; left: ${current.transform.x}px; top: ${current.transform.y}px; opacity: ${current.visible ? current.style.opacity / 100 : 0}; transform: ${transformCss(current)}; background: ${nodeBackground(current)}; border-width: ${current.style.strokeWidth}px; border-color: color-mix(in srgb, ${current.style.strokeColor} ${current.style.strokeOpacity}%, transparent); border-radius: ${cornerRadiusCss(current)}; clip-path: ${clipPathCss(current) ?? "none"}; --morphiq-fill: ${current.style.fills[0]?.color ?? "transparent"}; --morphiq-stroke: ${current.style.strokeColor}; --morphiq-stroke-width: ${current.style.strokeWidth}; box-shadow: ${nodeBoxShadow(current)}; filter: ${nodeFilter(current) ?? "none"}; animation-timing-function: ${timing}; }`;
   }).join("\n");
   const firstFrame = tracks[0].keyframes[0];
-  return `\n@keyframes ${name} {\n${frames}\n}\n.root[data-variant="base"] .${nodeClass(node)} { animation: ${name} ${workLength / Math.max(.01, document.timeline.speed)}s ${easingCss(firstFrame?.easing ?? "easeInOut", firstFrame?.bezier)} ${document.timeline.loop ? "infinite" : "1"} ${document.timeline.direction}; }`;
+  const iterations = document.timeline.loop ? "infinite" : document.timeline.direction === "alternate" ? "2" : "1";
+  return `\n@keyframes ${name} {\n${frames}\n}\n.root[data-variant="base"] .${nodeClass(node)} { animation: ${name} ${workLength / Math.max(.01, document.timeline.speed)}s ${easingCss(firstFrame?.easing ?? "easeInOut", firstFrame?.bezier)} ${iterations} ${document.timeline.direction}; }`;
+}
+
+function resolveVariantNode(document: StudioDocument, node: StudioNode, variant: StudioDocument["variants"][number]) {
+  let resolved = node;
+  if (node.instanceSourceId) resolved = mergeNodeOverride(resolved, variant.overrides[node.instanceSourceId]);
+  return mergeNodeOverride(resolved, variant.overrides[node.id]);
 }
 
 function variantCss(document: StudioDocument, node: StudioNode) {
   return document.variants.map((variant) => {
-    const override = variant.overrides[node.id];
-    if (!override) return "";
-    const resolved = mergeNodeOverride(node, override);
     const baseParent = node.parentId ? document.nodes.find((candidate) => candidate.id === node.parentId) : undefined;
-    const parent = baseParent ? mergeNodeOverride(baseParent, variant.overrides[baseParent.id]) : undefined;
+    const hasNodeOverride = Boolean(variant.overrides[node.id] || (node.instanceSourceId && variant.overrides[node.instanceSourceId]));
+    const hasParentOverride = Boolean(baseParent && (variant.overrides[baseParent.id] || (baseParent.instanceSourceId && variant.overrides[baseParent.instanceSourceId])));
+    if (!hasNodeOverride && !hasParentOverride) return "";
+    const resolved = resolveVariantNode(document, node, variant);
+    const parent = baseParent ? resolveVariantNode(document, baseParent, variant) : undefined;
     return `.root[data-variant=${JSON.stringify(variant.id)}] .${nodeClass(node)} { ${nodeDeclarations(resolved, true, parent)} }`;
   }).filter(Boolean).join("\n");
 }
@@ -520,7 +537,12 @@ function responsiveCss(document: StudioDocument, node: StudioNode) {
     const baseParent = node.parentId ? document.nodes.find((candidate) => candidate.id === node.parentId) : undefined;
     const parent = baseParent ? resolveResponsiveNode(baseParent, device) : undefined;
     const max = device === "mobile" ? 520 : 900;
-    rules.push(`@media (max-width: ${max}px) { .${nodeClass(node)} { ${nodeDeclarations(resolved, true, parent)} } }`);
+    const variants = document.variants.map((variant) => {
+      const variantNode = resolveVariantNode(document, resolved, variant);
+      const variantParent = parent ? resolveVariantNode(document, parent, variant) : undefined;
+      return `.root[data-variant=${JSON.stringify(variant.id)}] .${nodeClass(node)} { ${nodeDeclarations(variantNode, true, variantParent)} }`;
+    }).join("\n");
+    rules.push(`@media (max-width: ${max}px) { .${nodeClass(node)} { ${nodeDeclarations(resolved, true, parent)} }\n${variants} }`);
   });
   return rules.join("\n");
 }
@@ -559,8 +581,8 @@ function generatedRuntimeMotion(document: StudioDocument) {
     : property === "secondaryText"
       ? ["input", "dial", "progress"].includes(node.kind)
       : property === "value" && ["slider", "dial", "progress"].includes(node.kind);
-  const nodeTracks = document.nodes.flatMap((node) => document.timeline.tracks
-    .filter((track) => track.enabled && supportsContentTrack(node, track.property) && (track.nodeId === node.id || track.nodeId === node.instanceSourceId))
+  const nodeTracks = document.nodes.flatMap((node) => tracksForNode(document, node)
+    .filter((track) => track.enabled && supportsContentTrack(node, track.property))
     .map((track) => ({ key: nodeMotionKey(node, track.property), keyframes: [...track.keyframes].sort((a, b) => a.time - b.time) })));
   if (!variableTracks.length && !nodeTracks.length) return { helper: "", effect: "", enabled: false, nodes: false, variables: false };
   const [workStart, workEnd] = document.timeline.workArea;
@@ -606,6 +628,7 @@ function morphiqSample(frames: MorphiqMotionFrame[], time: number) {
     const startedAt = performance.now();
     const start = ${workStart}, end = ${workEnd}, length = Math.max(.001, end - start);
     const direction: string = ${JSON.stringify(document.timeline.direction)};
+    const totalLength = direction === "alternate" ? length * 2 : length;
     const tick = (now: number) => {
       if (now - lastPaint < ${1000 / document.timeline.fps}) { request = requestAnimationFrame(tick); return; }
       lastPaint = now;
@@ -615,10 +638,10 @@ function morphiqSample(frames: MorphiqMotionFrame[], time: number) {
       if (direction === "reverse") time = end - phase;
       if (direction === "alternate" && cycle % 2) time = end - phase;
       if (reverse) time = end - (time - start);
-      if (!${document.timeline.loop} && elapsed >= length) { time = reverse || direction === "reverse" ? start : end; setMotion("paused"); }
+      if (!${document.timeline.loop} && elapsed >= totalLength) { time = direction === "alternate" ? start : reverse || direction === "reverse" ? start : end; if (reverse && direction === "alternate") time = end; setMotion("paused"); }
       ${variableTracks.length ? "setVariables((current) => { const next = { ...current }; morphiqVariableTracks.forEach((track) => { const value = morphiqSample(track.keyframes, time); if (value !== undefined) next[track.variableId] = value; }); return next; });" : ""}
       ${nodeTracks.length ? "setNodeMotionValues((current) => { const next = { ...current }; morphiqNodeTracks.forEach((track) => { const value = morphiqSample(track.keyframes, time); if (value !== undefined) next[track.key] = value; }); return next; });" : ""}
-      if (${document.timeline.loop} || elapsed < length) request = requestAnimationFrame(tick);
+      if (${document.timeline.loop} || elapsed < totalLength) request = requestAnimationFrame(tick);
     };
     request = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(request);

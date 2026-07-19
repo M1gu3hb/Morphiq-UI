@@ -123,7 +123,9 @@ export function applyTimelineToNodes(nodes: StudioNode[], timeline: StudioTimeli
   });
   return nodes.map((source) => {
     let node = source;
-    const tracks = [...(tracksByNode.get(node.id) ?? []), ...(node.instanceSourceId ? tracksByNode.get(node.instanceSourceId) ?? [] : [])];
+    // Inherit the source motion first. Tracks authored directly on an instance
+    // are local overrides and must win for the same property.
+    const tracks = [...(node.instanceSourceId ? tracksByNode.get(node.instanceSourceId) ?? [] : []), ...(tracksByNode.get(node.id) ?? [])];
     for (const track of tracks) {
       const value = valueAtTime(track, time);
       if (value !== undefined) node = setPathValue(node, track.property, value);

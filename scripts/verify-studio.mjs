@@ -161,6 +161,60 @@ try {
   const variables = motion.applyTimelineToVariables([variable], { ...model.createTimeline(), tracks: [variableTrack] }, 1);
   assert.equal(variables[0].value, 50, "Variable timeline interpolation failed");
 
+  const componentDocument = model.createEmptyDocument("Component inheritance");
+  const componentRoot = model.createNode("frame", { id: "component-root", name: "Component root" });
+  const componentChild = model.createNode("text", { id: "component-child", name: "Component child", parentId: componentRoot.id });
+  componentRoot.childIds = [componentChild.id];
+  componentRoot.componentId = "component-definition";
+  componentChild.responsive.mobile = { transform: { x: 12 } };
+  const instanceRoot = structuredClone(componentRoot);
+  instanceRoot.id = "instance-root";
+  instanceRoot.name = "Instance root";
+  instanceRoot.instanceSourceId = componentRoot.id;
+  instanceRoot.childIds = ["instance-child"];
+  instanceRoot.instanceOverrides = {};
+  const instanceChild = structuredClone(componentChild);
+  instanceChild.id = "instance-child";
+  instanceChild.name = "Instance child";
+  instanceChild.parentId = instanceRoot.id;
+  instanceChild.instanceSourceId = componentChild.id;
+  instanceChild.responsive.mobile = { transform: { x: 99 } };
+  componentDocument.nodes = [componentRoot, componentChild, instanceRoot, instanceChild];
+  componentDocument.components = [{ id: "component-definition", name: "Component", rootNodeId: componentRoot.id, description: "", variantIds: ["open", "local"], properties: [] }];
+  componentDocument.variants = [
+    { id: "open", name: "Open", description: "", overrides: { [componentChild.id]: { transform: { x: 42 } } } },
+    { id: "local", name: "Local", description: "", overrides: { [componentChild.id]: { transform: { x: 42 } }, [instanceChild.id]: { transform: { x: 84 } } } },
+  ];
+  const sourceMotion = motion.createTrack(componentChild, "transform.x", 2);
+  sourceMotion.keyframes = [motion.createKeyframe(0, 0), motion.createKeyframe(2, 100)];
+  const instanceMotion = motion.createTrack(instanceChild, "transform.x", 2);
+  instanceMotion.keyframes = [motion.createKeyframe(0, 0), motion.createKeyframe(2, 200)];
+  componentDocument.timeline.duration = 2;
+  componentDocument.timeline.workArea = [0, 2];
+  componentDocument.timeline.direction = "alternate";
+  componentDocument.timeline.tracks = [sourceMotion, instanceMotion];
+  const animatedInstance = motion.applyTimelineToNodes([instanceChild], componentDocument.timeline, 1)[0];
+  assert.equal(animatedInstance.transform.x, 100, "Instance-authored motion must override inherited component motion");
+  const componentCss = exporter.generateCss(componentDocument);
+  assert.match(componentCss, /data-variant="open"\] \.morphiq-instance-child-instance-child \{[^}]*left: 42px/s, "Source variants must propagate to exported instances");
+  assert.match(componentCss, /data-variant="local"\] \.morphiq-instance-child-instance-child \{[^}]*left: 84px/s, "Instance variant overrides must win in exported CSS");
+  assert.match(componentCss, /@media \(max-width: 520px\)[\s\S]*\.morphiq-instance-child-instance-child \{[^}]*left: 12px/s, "Instance children must inherit current responsive rules from the main component");
+  assert.match(componentCss, / 2 alternate;/, "A non-looping alternate animation must perform both legs");
+  assert.ok(!/Object\.fromEntries\(definition\.properties\.map\(\(property\) => \[property\.id, property\.defaultValue\]\)\)/.test(shellSource), "New instances must not mark inherited defaults as local overrides");
+  const expandedComponent = structuredClone(componentDocument);
+  const addedSourceChild = model.createNode("icon", { id: "component-added-child", parentId: componentRoot.id });
+  expandedComponent.nodes.push(addedSourceChild);
+  expandedComponent.nodes.find((candidate) => candidate.id === componentRoot.id).childIds.push(addedSourceChild.id);
+  const synchronizedComponent = model.synchronizeComponentInstances(expandedComponent);
+  const addedInstanceChild = synchronizedComponent.nodes.find((candidate) => candidate.instanceSourceId === addedSourceChild.id);
+  assert.ok(addedInstanceChild, "New main-component layers must be created inside existing instances");
+  assert.equal(addedInstanceChild.parentId, instanceRoot.id, "New instance layers must preserve the source hierarchy");
+  const reducedComponent = structuredClone(synchronizedComponent);
+  reducedComponent.nodes = reducedComponent.nodes.filter((candidate) => candidate.id !== addedSourceChild.id);
+  reducedComponent.nodes.find((candidate) => candidate.id === componentRoot.id).childIds = reducedComponent.nodes.find((candidate) => candidate.id === componentRoot.id).childIds.filter((id) => id !== addedSourceChild.id);
+  const reducedSynchronization = model.synchronizeComponentInstances(reducedComponent);
+  assert.ok(!reducedSynchronization.nodes.some((candidate) => candidate.id === addedInstanceChild.id), "Removed main-component layers must be removed from linked instances");
+
   const interactive = structuredClone(templates.studioTemplates[0].document);
   interactive.variables = [variable];
   interactive.timeline.tracks.push(variableTrack);
