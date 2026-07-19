@@ -6,6 +6,10 @@ import { Rnd } from "react-rnd";
 import {
   AlignCenterHorizontal,
   AlignCenterVertical,
+  AlignEndHorizontal,
+  AlignEndVertical,
+  AlignStartHorizontal,
+  AlignStartVertical,
   ArrowDown,
   ArrowLeft,
   ArrowUp,
@@ -27,11 +31,9 @@ import {
   Play,
   Plus,
   Redo2,
-  RotateCcw,
   Save,
   SlidersHorizontal,
   Smartphone,
-  Sparkles,
   Square,
   Tablet,
   ToggleLeft,
@@ -40,22 +42,19 @@ import {
   Undo2,
   Unlock,
   Upload,
-  WandSparkles,
 } from "lucide-react";
 import { tr, type Locale } from "@/lib/i18n";
 import { StudioNodePreview } from "./studio-node";
+import { ColorControl, DesignInspector, MotionInspector, StatesInspector } from "./studio-inspector";
 import {
   createNode,
   deviceSizes,
   initialDocument,
-  isStudioDocument,
+  normalizeStudioDocument,
   surfaceDefaults,
   type Device,
   type InspectorTab,
   type InteractionState,
-  type MotionEasing,
-  type MotionPreset,
-  type MotionTrigger,
   type NodeKind,
   type NodeMotion,
   type NodeStyle,
@@ -69,8 +68,6 @@ import { downloadFile, exportDocument, generateAiPrompt, generateCss, generateRe
 type ExportTab = "react" | "css" | "ai" | "json";
 
 const componentKinds: NodeKind[] = ["button", "card", "text", "badge", "input", "toggle", "avatar", "progress"];
-const interactionStates: InteractionState[] = ["base", "hover", "pressed", "focus", "disabled"];
-const motionPresets: MotionPreset[] = ["none", "float", "pulse", "wobble", "bounce", "rotate", "slide", "glow"];
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
 
@@ -109,18 +106,19 @@ export function StudioShell({ locale }: { locale: Locale }) {
   const exportContent = exportTab === "react" ? reactCode : exportTab === "css" ? cssCode : exportTab === "ai" ? aiPrompt : JSON.stringify(project, null, 2);
 
   useEffect(() => {
-    const stored = window.localStorage.getItem("morphiq-studio-v3");
+    const stored = window.localStorage.getItem("morphiq-studio-v4") ?? window.localStorage.getItem("morphiq-studio-v3");
     if (!stored) return;
     try {
       const parsed: unknown = JSON.parse(stored);
-      if (!isStudioDocument(parsed)) throw new Error("Invalid document");
+      const normalized = normalizeStudioDocument(parsed);
+      if (!normalized) throw new Error("Invalid document");
       const restore = window.setTimeout(() => {
-        setProject(parsed);
-        setSelectedId(parsed.nodes[0].id);
+        setProject(normalized);
+        setSelectedId(normalized.nodes[0].id);
       }, 0);
       return () => window.clearTimeout(restore);
     } catch {
-      window.localStorage.removeItem("morphiq-studio-v3");
+      window.localStorage.removeItem("morphiq-studio-v4");
     }
   }, []);
 
@@ -212,7 +210,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
   }
 
   function duplicateSelected() {
-    const clone: StudioNode = { ...selected, style: { ...selected.style }, states: structuredClone(selected.states), motion: { ...selected.motion }, id: `${selected.kind}-${Date.now()}`, name: `${selected.name} copy`, x: clamp(selected.x + 18, 0, size.width - selected.width), y: clamp(selected.y + 18, 0, size.height - selected.height) };
+    const clone: StudioNode = { ...selected, style: { ...selected.style }, states: structuredClone(selected.states), motion: { ...selected.motion, keyframes: selected.motion.keyframes.map((frame) => ({ ...frame })) }, id: `${selected.kind}-${Date.now()}`, name: `${selected.name} copy`, x: clamp(selected.x + 18, 0, size.width - selected.width), y: clamp(selected.y + 18, 0, size.height - selected.height) };
     commit({ ...project, nodes: [...project.nodes, clone] });
     setSelectedId(clone.id);
   }
@@ -234,13 +232,18 @@ export function StudioShell({ locale }: { locale: Locale }) {
     commit({ ...project, nodes });
   }
 
-  function alignSelected(axis: "x" | "y") {
+  function alignSelected(position: "left" | "centerX" | "right" | "top" | "centerY" | "bottom") {
     if (selected.locked) return;
-    updateSelected(axis === "x" ? { x: Math.max(0, (size.width - selected.width) / 2) } : { y: Math.max(0, (size.height - selected.height) / 2) });
+    if (position === "left") updateSelected({ x: 0 });
+    if (position === "centerX") updateSelected({ x: Math.max(0, (size.width - selected.width) / 2) });
+    if (position === "right") updateSelected({ x: Math.max(0, size.width - selected.width) });
+    if (position === "top") updateSelected({ y: 0 });
+    if (position === "centerY") updateSelected({ y: Math.max(0, (size.height - selected.height) / 2) });
+    if (position === "bottom") updateSelected({ y: Math.max(0, size.height - selected.height) });
   }
 
   function saveProject() {
-    window.localStorage.setItem("morphiq-studio-v3", JSON.stringify(project));
+    window.localStorage.setItem("morphiq-studio-v4", JSON.stringify(project));
     setNotice(t("Project saved locally", "Proyecto guardado localmente"));
   }
 
@@ -254,14 +257,15 @@ export function StudioShell({ locale }: { locale: Locale }) {
     if (!file) return;
     try {
       const parsed: unknown = JSON.parse(await file.text());
-      if (!isStudioDocument(parsed)) throw new Error("Invalid project");
+      const normalized = normalizeStudioDocument(parsed);
+      if (!normalized) throw new Error("Invalid project");
       setPast((current) => [...current, project].slice(-60));
-      setProject(parsed);
+      setProject(normalized);
       setFuture([]);
-      setSelectedId(parsed.nodes[0].id);
+      setSelectedId(normalized.nodes[0].id);
       setNotice(t("Project imported", "Proyecto importado"));
     } catch {
-      setNotice(t("That file is not a Morphiq v3 project", "El archivo no es un proyecto Morphiq v3"));
+      setNotice(t("That file is not a compatible Morphiq project", "El archivo no es un proyecto Morphiq compatible"));
     }
   }
 
@@ -352,8 +356,12 @@ export function StudioShell({ locale }: { locale: Locale }) {
             <div className="canvas-mode-status"><i className={previewMode ? "status-live" : ""} />{previewMode ? t("Preview — controls are live", "Vista previa — controles activos") : t("Edit — drag, resize or nudge", "Edición — mueve, escala o ajusta")}</div>
             <div className="canvas-quick-tools">
               <button aria-label={t("Toggle grid", "Mostrar cuadrícula")} aria-pressed={project.canvas.showGrid} onClick={() => updateCanvas({ showGrid: !project.canvas.showGrid })} type="button"><Grid3X3 size={13} /></button>
-              <button aria-label={t("Align horizontally", "Centrar horizontalmente")} disabled={selected.locked} onClick={() => alignSelected("x")} type="button"><AlignCenterHorizontal size={13} /></button>
-              <button aria-label={t("Align vertically", "Centrar verticalmente")} disabled={selected.locked} onClick={() => alignSelected("y")} type="button"><AlignCenterVertical size={13} /></button>
+              <button aria-label={t("Align left", "Alinear a la izquierda")} disabled={selected.locked} onClick={() => alignSelected("left")} type="button"><AlignStartVertical size={13} /></button>
+              <button aria-label={t("Center horizontally", "Centrar horizontalmente")} disabled={selected.locked} onClick={() => alignSelected("centerX")} type="button"><AlignCenterVertical size={13} /></button>
+              <button aria-label={t("Align right", "Alinear a la derecha")} disabled={selected.locked} onClick={() => alignSelected("right")} type="button"><AlignEndVertical size={13} /></button>
+              <button aria-label={t("Align top", "Alinear arriba")} disabled={selected.locked} onClick={() => alignSelected("top")} type="button"><AlignStartHorizontal size={13} /></button>
+              <button aria-label={t("Center vertically", "Centrar verticalmente")} disabled={selected.locked} onClick={() => alignSelected("centerY")} type="button"><AlignCenterHorizontal size={13} /></button>
+              <button aria-label={t("Align bottom", "Alinear abajo")} disabled={selected.locked} onClick={() => alignSelected("bottom")} type="button"><AlignEndHorizontal size={13} /></button>
               <button className="snap-toggle" aria-pressed={project.canvas.snap} onClick={() => updateCanvas({ snap: !project.canvas.snap })} type="button">SNAP</button>
             </div>
             <div className="zoom-tools"><button aria-label={t("Zoom out", "Alejar")} onClick={() => setZoom((value) => Math.max(50, value - 10))} type="button">−</button><span>{zoom}%</span><button aria-label={t("Zoom in", "Acercar")} onClick={() => setZoom((value) => Math.min(140, value + 10))} type="button">+</button></div>
@@ -365,14 +373,18 @@ export function StudioShell({ locale }: { locale: Locale }) {
                 <Rnd
                   bounds="parent"
                   disableDragging={previewMode || node.locked || node.id !== selectedId}
+                  dragGrid={project.canvas.snap ? [10, 10] : [1, 1]}
                   enableResizing={!previewMode && !node.locked && node.id === selectedId}
                   key={`${node.id}-${animationEpoch}`}
+                  lockAspectRatio={node.lockAspectRatio}
                   minHeight={28}
                   minWidth={48}
                   onDragStart={() => setSelectedId(node.id)}
                   onDragStop={(_, data) => { if (node.id === selectedId) updateSelected({ x: project.canvas.snap ? Math.round(data.x / 10) * 10 : data.x, y: project.canvas.snap ? Math.round(data.y / 10) * 10 : data.y }); }}
                   onResizeStop={(_, __, ref, ___, position) => { if (node.id === selectedId) updateSelected({ width: ref.offsetWidth, height: ref.offsetHeight, x: position.x, y: position.y }); }}
                   position={{ x: node.x, y: node.y }}
+                  resizeGrid={project.canvas.snap ? [10, 10] : [1, 1]}
+                  scale={zoom / 100}
                   size={{ width: node.width, height: node.height }}
                   style={{ zIndex: index + 1 }}
                 >
@@ -393,7 +405,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
 
           {inspectorTab === "design" && <DesignInspector locale={locale} node={selected} onApplySurface={applySurface} onChange={updateSelected} onStyle={updateStyle} />}
           {inspectorTab === "states" && <StatesInspector forcedState={forcedState} locale={locale} node={selected} onForcedState={setForcedState} onState={updateState} onStyle={updateStyle} />}
-          {inspectorTab === "motion" && <MotionInspector locale={locale} node={selected} onChange={updateMotion} onReplay={() => setAnimationEpoch((value) => value + 1)} presets={motionPresets} />}
+          {inspectorTab === "motion" && <MotionInspector locale={locale} node={selected} onChange={updateMotion} onReplay={() => setAnimationEpoch((value) => value + 1)} />}
 
           <div className="inspector-section code-snippet"><div><span className="studio-panel-label">{t("Generated React", "React generado")}</span><button aria-label={t("Copy React", "Copiar React")} onClick={() => void copy(reactCode)} type="button">{copied ? <Check size={13} /> : <Copy size={13} />}</button></div><pre>{reactCode.slice(0, 220)}…</pre><button className="open-export-button" onClick={() => setShowExport(true)} type="button"><Code2 size={12} /> {t("Open full export", "Abrir exportación")}</button></div>
         </aside>
@@ -404,50 +416,4 @@ export function StudioShell({ locale }: { locale: Locale }) {
       {showExport && <div className="export-backdrop" role="presentation" onMouseDown={() => setShowExport(false)}><section className="export-dialog export-dialog-expanded" role="dialog" aria-modal="true" aria-label={t("Export component", "Exportar componente")} onMouseDown={(event) => event.stopPropagation()}><div className="export-dialog-head"><div><span>{t("Production handoff", "Entrega para producción")}</span><h2>{t("Export", "Exportar")} {selected.name}</h2></div><button onClick={() => setShowExport(false)} aria-label={t("Close", "Cerrar")} type="button">×</button></div><div className="export-tabs" role="tablist">{(["react", "css", "ai", "json"] as ExportTab[]).map((tab) => <button aria-selected={exportTab === tab} key={tab} onClick={() => setExportTab(tab)} role="tab" type="button">{tab === "ai" ? t("AI handoff", "Para IA") : tab.toUpperCase()}</button>)}</div><pre>{exportContent}</pre><div className="export-dialog-actions"><span>{exportTab === "json" ? t("Versioned project backup", "Respaldo versionado del proyecto") : t("Accessible states and reduced motion included", "Incluye estados accesibles y movimiento reducido")}</span><div><button onClick={() => { if (exportTab === "json") exportDocument(project); else downloadFile(exportTab === "react" ? `${selected.name.replace(/\s+/g, "")}.tsx` : exportTab === "css" ? `${selected.name.replace(/\s+/g, "")}.module.css` : `${selected.name.replace(/\s+/g, "")}-ai.txt`, exportContent); }} type="button"><Download size={15} /> {t("Download", "Descargar")}</button><button onClick={() => void copy(exportContent)} type="button">{copied ? <Check size={15} /> : <Copy size={15} />} {copied ? t("Copied", "Copiado") : t("Copy", "Copiar")}</button></div></div></section></div>}
     </main>
   );
-}
-
-function DesignInspector({ locale, node, onApplySurface, onChange, onStyle }: { locale: Locale; node: StudioNode; onApplySurface: (surface: Surface) => void; onChange: (patch: Partial<StudioNode>) => void; onStyle: (patch: Partial<NodeStyle>) => void }) {
-  const t = (english: string, spanish: string) => tr(locale, english, spanish);
-  return <>
-    <div className="inspector-section"><span className="studio-panel-label">{t("Content", "Contenido")}</span><label className="stacked-field"><span>{node.kind === "input" ? t("Label", "Etiqueta") : t("Text", "Texto")}</span><input value={node.text} onChange={(event) => onChange({ text: event.target.value })} /></label>{["card", "input"].includes(node.kind) && <label className="stacked-field"><span>{node.kind === "input" ? "Placeholder" : t("Description", "Descripción")}</span><textarea rows={2} value={node.secondaryText} onChange={(event) => onChange({ secondaryText: event.target.value })} /></label>}{node.kind === "progress" && <RangeControl label={t("Progress", "Progreso")} max={100} min={0} onChange={(value) => onChange({ value })} value={node.value} suffix="%" />}{node.kind === "toggle" && <label className="check-field"><input checked={node.checked} onChange={(event) => onChange({ checked: event.target.checked })} type="checkbox" /><span>{t("Checked by default", "Activado por defecto")}</span></label>}<label className="check-field"><input checked={node.disabled} onChange={(event) => onChange({ disabled: event.target.checked })} type="checkbox" /><span>{t("Disabled", "Desactivado")}</span></label></div>
-    <div className="inspector-section"><span className="studio-panel-label">{t("Surface language", "Lenguaje de superficie")}</span><div className="surface-selector">{(["clay", "glass", "skeuo", "adaptive"] as Surface[]).map((surface) => <button aria-pressed={node.surface === surface} className={node.surface === surface ? "surface-option-active" : ""} key={surface} onClick={() => onApplySurface(surface)} type="button"><i className={`surface-dot surface-dot-${surface}`} />{surface}</button>)}</div></div>
-    <div className="inspector-section"><span className="studio-panel-label">{t("Geometry", "Geometría")}</span><div className="inspector-field-grid">{(["width", "height", "x", "y"] as const).map((key) => <NumberControl key={key} label={key === "width" ? "W" : key === "height" ? "H" : key.toUpperCase()} onChange={(value) => onChange({ [key]: Math.max(0, value) })} value={Math.round(node[key])} />)}</div><RangeControl label={t("Padding", "Relleno interno")} max={48} min={0} onChange={(padding) => onStyle({ padding })} value={node.style.padding} suffix="px" /></div>
-    <div className="inspector-section"><span className="studio-panel-label">{t("Material", "Material")}</span><ColorControl label={t("Fill", "Relleno")} onChange={(fill) => onStyle({ fill })} value={node.style.fill === "transparent" ? "#ffffff" : node.style.fill} /><ColorControl label={t("Text", "Texto")} onChange={(color) => onStyle({ color })} value={node.style.color} /><ColorControl label={t("Border", "Borde")} onChange={(borderColor) => onStyle({ borderColor })} value={node.style.borderColor} /><RangeControl label={t("Border width", "Ancho de borde")} max={8} min={0} onChange={(borderWidth) => onStyle({ borderWidth })} value={node.style.borderWidth} suffix="px" /><RangeControl label={t("Radius", "Radio")} max={80} min={0} onChange={(radius) => onStyle({ radius })} value={node.style.radius} suffix="px" /><RangeControl label={t("Depth", "Profundidad")} max={28} min={0} onChange={(depth) => onStyle({ depth })} value={node.style.depth} /><RangeControl label={t("Softness", "Suavidad")} max={48} min={0} onChange={(blur) => onStyle({ blur })} value={node.style.blur} /><RangeControl label={t("Opacity", "Opacidad")} max={100} min={0} onChange={(opacity) => onStyle({ opacity })} value={node.style.opacity} suffix="%" /></div>
-    <div className="inspector-section"><span className="studio-panel-label">{t("Typography", "Tipografía")}</span><RangeControl label={t("Font size", "Tamaño")} max={52} min={7} onChange={(fontSize) => onStyle({ fontSize })} value={node.style.fontSize} suffix="px" /><RangeControl label={t("Weight", "Peso")} max={900} min={300} onChange={(fontWeight) => onStyle({ fontWeight })} step={100} value={node.style.fontWeight} /><RangeControl label={t("Tracking", "Espaciado")} max={8} min={-2} onChange={(letterSpacing) => onStyle({ letterSpacing })} step={.1} value={node.style.letterSpacing} suffix="px" /><div className="segmented-control">{(["left", "center", "right"] as const).map((textAlign) => <button aria-pressed={node.style.textAlign === textAlign} key={textAlign} onClick={() => onStyle({ textAlign })} type="button">{textAlign}</button>)}</div></div>
-  </>;
-}
-
-function StatesInspector({ forcedState, locale, node, onForcedState, onState, onStyle }: { forcedState: InteractionState; locale: Locale; node: StudioNode; onForcedState: (state: InteractionState) => void; onState: (state: Exclude<InteractionState, "base">, patch: Partial<StateStyle>) => void; onStyle: (patch: Partial<NodeStyle>) => void }) {
-  const t = (english: string, spanish: string) => tr(locale, english, spanish);
-  const current = forcedState === "base" ? null : node.states[forcedState];
-  return <>
-    <div className="inspector-section"><span className="studio-panel-label">{t("Interaction state", "Estado de interacción")}</span><div className="state-selector">{interactionStates.map((state) => <button aria-pressed={forcedState === state} key={state} onClick={() => onForcedState(state)} type="button">{state === "pressed" ? t("Press", "Presión") : state === "disabled" ? t("Disabled", "Inactivo") : state}</button>)}</div><p className="inspector-help">{t("The canvas is forcing this state. Preview mode uses real pointer and keyboard interaction.", "El lienzo fuerza este estado. La vista previa usa interacción real de puntero y teclado.")}</p></div>
-    <div className="inspector-section"><span className="studio-panel-label">{forcedState === "base" ? t("Base appearance", "Apariencia base") : t("State overrides", "Cambios del estado")}</span>{forcedState === "base" ? <><ColorControl label={t("Fill", "Relleno")} onChange={(fill) => onStyle({ fill })} value={node.style.fill === "transparent" ? "#ffffff" : node.style.fill} /><ColorControl label={t("Text", "Texto")} onChange={(color) => onStyle({ color })} value={node.style.color} /><RangeControl label={t("Opacity", "Opacidad")} max={100} min={0} onChange={(opacity) => onStyle({ opacity })} value={node.style.opacity} suffix="%" /></> : <><OverrideColor label={t("Fill override", "Cambio de relleno")} onChange={(fill) => onState(forcedState, { fill })} value={current?.fill ?? ""} fallback={node.style.fill} /><OverrideColor label={t("Text override", "Cambio de texto")} onChange={(color) => onState(forcedState, { color })} value={current?.color ?? ""} fallback={node.style.color} /><RangeControl label={t("Opacity", "Opacidad")} max={100} min={0} onChange={(opacity) => onState(forcedState, { opacity })} value={current?.opacity ?? 100} suffix="%" /><RangeControl label="Scale" max={140} min={60} onChange={(scale) => onState(forcedState, { scale })} value={current?.scale ?? 100} suffix="%" /><RangeControl label="Translate Y" max={24} min={-24} onChange={(translateY) => onState(forcedState, { translateY })} value={current?.translateY ?? 0} suffix="px" /><RangeControl label="Rotate" max={20} min={-20} onChange={(rotate) => onState(forcedState, { rotate })} value={current?.rotate ?? 0} suffix="°" />{forcedState === "focus" && <ColorControl label={t("Focus ring", "Anillo de foco")} onChange={(outlineColor) => onState("focus", { outlineColor })} value={current?.outlineColor ?? "#7359df"} />}</>}</div>
-  </>;
-}
-
-function MotionInspector({ locale, node, onChange, onReplay, presets }: { locale: Locale; node: StudioNode; onChange: (patch: Partial<NodeMotion>) => void; onReplay: () => void; presets: MotionPreset[] }) {
-  const t = (english: string, spanish: string) => tr(locale, english, spanish);
-  return <>
-    <div className="inspector-section"><div className="section-heading"><span className="studio-panel-label">{t("Motion preset", "Animación")}</span><button onClick={onReplay} type="button"><RotateCcw size={11} /> {t("Replay", "Repetir")}</button></div><div className="motion-grid">{presets.map((preset) => <button aria-pressed={node.motion.preset === preset} key={preset} onClick={() => onChange({ preset })} type="button"><WandSparkles size={13} />{preset}</button>)}</div></div>
-    <div className="inspector-section"><span className="studio-panel-label">{t("Playback", "Reproducción")}</span><label className="select-field"><span>{t("Trigger", "Disparador")}</span><select value={node.motion.trigger} onChange={(event) => onChange({ trigger: event.target.value as MotionTrigger })}><option value="loop">Loop</option><option value="hover">Hover</option><option value="tap">Tap / Press</option><option value="load">On load</option></select></label><label className="select-field"><span>Easing</span><select value={node.motion.easing} onChange={(event) => onChange({ easing: event.target.value as MotionEasing })}><option value="easeOut">Ease out</option><option value="easeInOut">Ease in/out</option><option value="linear">Linear</option><option value="spring">Spring</option></select></label><RangeControl label={t("Duration", "Duración")} max={4} min={.1} onChange={(duration) => onChange({ duration })} step={.05} value={node.motion.duration} suffix="s" /><RangeControl label={t("Delay", "Retraso")} max={2} min={0} onChange={(delay) => onChange({ delay })} step={.05} value={node.motion.delay} suffix="s" /><RangeControl label={t("Intensity", "Intensidad")} max={24} min={1} onChange={(intensity) => onChange({ intensity })} value={node.motion.intensity} /><label className="select-field"><span>{t("Repeat", "Repetición")}</span><select value={node.motion.repeat} onChange={(event) => onChange({ repeat: Number(event.target.value) })}><option value={0}>{t("Once", "Una vez")}</option><option value={1}>2×</option><option value={2}>3×</option><option value={-1}>{t("Infinite", "Infinita")}</option></select></label></div>
-    <div className="motion-summary"><Sparkles size={15} /><div><b>{node.motion.preset}</b><span>{node.motion.trigger} · {node.motion.duration}s · {node.motion.easing}</span></div></div>
-  </>;
-}
-
-function NumberControl({ label, onChange, value }: { label: string; onChange: (value: number) => void; value: number }) {
-  return <label className="inspector-field"><span>{label}</span><input onChange={(event) => onChange(Number(event.target.value))} type="number" value={value} /></label>;
-}
-
-function RangeControl({ label, max, min, onChange, step = 1, suffix = "", value }: { label: string; max: number; min: number; onChange: (value: number) => void; step?: number; suffix?: string; value: number }) {
-  return <label className="range-field"><span>{label} <b>{value}{suffix}</b></span><input max={max} min={min} onChange={(event) => onChange(Number(event.target.value))} step={step} type="range" value={value} /></label>;
-}
-
-function ColorControl({ label, onChange, value }: { label: string; onChange: (value: string) => void; value: string }) {
-  const safeValue = /^#[0-9a-f]{6}$/i.test(value) ? value : "#ffffff";
-  return <label className="color-field"><span>{label}</span><input onChange={(event) => onChange(event.target.value)} type="color" value={safeValue} /><code>{value}</code></label>;
-}
-
-function OverrideColor({ fallback, label, onChange, value }: { fallback: string; label: string; onChange: (value: string) => void; value: string }) {
-  return <div className="override-color"><ColorControl label={label} onChange={onChange} value={value || fallback} /><button disabled={!value} onClick={() => onChange("")} type="button">{value ? "↺ inherit" : "inherited"}</button></div>;
 }

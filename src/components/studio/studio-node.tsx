@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, type CSSProperties, type ReactNode } from "react";
-import { motion, type TargetAndTransition, type Transition } from "motion/react";
+import { motion, type Transition } from "motion/react";
 import { Check, Sparkles } from "lucide-react";
-import { elementShadow, type InteractionState, type StudioNode } from "./studio-model";
+import { elementBackground, elementShadow, type InteractionState, type StudioNode } from "./studio-model";
+import { motionRepeatType, motionTarget, motionTimes } from "./studio-motion";
 
 type StudioNodePreviewProps = {
   node: StudioNode;
@@ -14,25 +15,23 @@ type StudioNodePreviewProps = {
   onChange: (patch: Partial<StudioNode>) => void;
 };
 
-function motionTarget(node: StudioNode): TargetAndTransition {
-  const intensity = node.motion.intensity;
-  switch (node.motion.preset) {
-    case "float": return { y: [0, -intensity, 0] };
-    case "pulse": return { scale: [1, 1 + intensity / 100, 1] };
-    case "wobble": return { rotate: [-intensity / 3, intensity / 3, -intensity / 3] };
-    case "bounce": return { y: [0, -intensity * 1.8, 0] };
-    case "rotate": return { rotate: [0, intensity * 6, 0] };
-    case "slide": return { x: [-intensity, intensity, -intensity] };
-    case "glow": return { filter: ["brightness(1)", `brightness(${1 + intensity / 45})`, "brightness(1)"] };
-    default: return {};
-  }
-}
+const fontFamilies: Record<StudioNode["style"]["fontFamily"], string> = {
+  body: "var(--font-body), sans-serif",
+  display: "var(--font-display), sans-serif",
+  mono: "ui-monospace, SFMono-Regular, Consolas, monospace",
+};
 
 function motionTransition(node: StudioNode): Transition {
-  if (node.motion.easing === "spring") {
-    return { type: "spring", bounce: Math.min(0.8, node.motion.intensity / 20), duration: node.motion.duration, delay: node.motion.delay, repeat: node.motion.repeat < 0 ? Infinity : node.motion.repeat };
-  }
-  return { duration: node.motion.duration, delay: node.motion.delay, ease: node.motion.easing, repeat: node.motion.repeat < 0 ? Infinity : node.motion.repeat };
+  const repeat = node.motion.repeat < 0 ? Infinity : node.motion.repeat;
+  const shared = {
+    delay: node.motion.delay,
+    duration: node.motion.duration,
+    repeat,
+    repeatType: motionRepeatType(node),
+    times: motionTimes(node),
+  } as const;
+  if (node.motion.easing === "spring") return { ...shared, type: "spring", bounce: Math.min(0.8, node.motion.intensity / 20) };
+  return { ...shared, ease: node.motion.easing };
 }
 
 function NodeContent({ node, previewMode, onChange }: Pick<StudioNodePreviewProps, "node" | "previewMode" | "onChange">): ReactNode {
@@ -57,36 +56,41 @@ export function StudioNodePreview({ node, selected, previewMode, forcedState, on
   const state = activeState === "base" ? null : node.states[activeState];
   const visualStyle: CSSProperties = {
     color: state?.color || node.style.color,
-    background: state?.fill || node.style.fill,
+    background: state?.fill || elementBackground(node),
     borderRadius: node.style.radius,
     borderWidth: node.style.borderWidth,
     borderColor: node.style.borderColor,
+    borderStyle: node.style.borderStyle,
     boxShadow: node.kind === "text" ? "none" : elementShadow(node, activeState === "hover" ? 2 : activeState === "pressed" ? -2 : 0),
-    backdropFilter: node.surface === "glass" ? `blur(${node.style.blur}px) saturate(135%)` : undefined,
-    WebkitBackdropFilter: node.surface === "glass" ? `blur(${node.style.blur}px) saturate(135%)` : undefined,
+    backdropFilter: node.surface === "glass" ? `blur(${node.style.blur}px) saturate(${node.style.saturate}%)` : undefined,
+    WebkitBackdropFilter: node.surface === "glass" ? `blur(${node.style.blur}px) saturate(${node.style.saturate}%)` : undefined,
+    filter: state?.blur ? `blur(${state.blur}px)` : undefined,
+    fontFamily: fontFamilies[node.style.fontFamily],
     fontSize: node.style.fontSize,
     fontWeight: node.style.fontWeight,
     letterSpacing: node.style.letterSpacing,
+    lineHeight: node.style.lineHeight,
     opacity: (state?.opacity ?? node.style.opacity) / 100,
     padding: node.style.padding,
     textAlign: node.style.textAlign,
-    transform: `translateY(${state?.translateY ?? 0}px) scale(${(state?.scale ?? 100) / 100}) rotate(${state?.rotate ?? 0}deg)`,
+    textTransform: node.style.textTransform,
+    transform: `translate(${state?.translateX ?? 0}px, ${state?.translateY ?? 0}px) scale(${(state?.scale ?? 100) / 100}) rotate(${node.style.rotation + (state?.rotate ?? 0)}deg) skew(${node.style.skewX}deg, ${node.style.skewY}deg)`,
+    transformOrigin: node.style.transformOrigin,
     outline: activeState === "focus" ? `2px solid ${state?.outlineColor}` : "none",
     outlineOffset: activeState === "focus" ? 3 : undefined,
   };
   const target = motionTarget(node);
   const transition = motionTransition(node);
-  const hasMotion = node.motion.preset !== "none";
+  const hasMotion = node.motion.enabled && node.motion.preset !== "none";
   const motionProps = hasMotion ? {
-    animate: node.motion.trigger === "loop" ? target : node.motion.trigger === "load" ? { opacity: 1, scale: 1 } : undefined,
-    initial: node.motion.trigger === "load" ? { opacity: 0, scale: Math.max(.65, 1 - node.motion.intensity / 40) } : undefined,
+    animate: node.motion.trigger === "loop" || node.motion.trigger === "load" ? target : undefined,
     whileHover: node.motion.trigger === "hover" ? target : undefined,
     whileTap: node.motion.trigger === "tap" ? target : undefined,
     transition,
   } : {};
 
   return (
-    <motion.div className="canvas-motion-wrap" {...motionProps}>
+    <motion.div className="canvas-motion-wrap" style={{ perspective: 900, transformStyle: "preserve-3d" }} {...motionProps}>
       <div
         aria-disabled={node.disabled || undefined}
         className={`canvas-node canvas-node-${node.kind} ${selected && !previewMode ? "canvas-node-selected" : ""}`}
