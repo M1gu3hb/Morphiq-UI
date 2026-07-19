@@ -14,13 +14,19 @@ The foundry is the source of truth. The website and studio consume the same comp
 metadata. The studio must never become a separate toy format that cannot export clean
 code.
 
-## Current checkpoint: Phase 0.5
+## Current checkpoint: Studio v5
 
 - Product direction and original visual language.
 - Bilingual landing page and catalog with browser-language detection.
 - Animated library with 24 customizable objects and TSX, CSS, SVG, bundle, and AI-prompt export.
-- Studio canvas with history, layers, responsive device frames, snapping, alignment,
-  resize, drag, material and motion tuning, local save, and JSX/JSON export.
+- Studio v5 component engine with nested layers, vector editing, masks, boolean
+  operations, multiple fills and effects, responsive auto layout, reusable component
+  instances, variables, variants, prototype interactions, and 3D transforms.
+- Global motion timeline with property tracks, unlimited keyframes, visual Bézier
+  editing, springs, markers, work ranges, copy/paste, stagger, and variable animation.
+- Editable showcase templates for Clay, Glass, Skeuomorphic, Adaptive/Polymorphic,
+  plus a double-door hinge animation built from independent layers.
+- React/CSS, HTML, SVG, AI handoff, and lossless project JSON exports.
 - Private-repository workflow, GitHub quality checks, and one definitive Vercel project.
 
 ## Phase 1 — Component engine
@@ -33,16 +39,15 @@ code.
 
 Exit criterion: components are good enough to use in a paying client's production UI.
 
-## Phase 2 — Studio alpha
+## Phase 2 — Studio v5 hardening
 
-- Multiple frames and responsive breakpoints.
-- Constraints, alignment, groups, ordering, and reusable component instances.
-- Live JSX/CSS editor powered by Sandpack.
-- Undo/redo history, autosave, import/export project JSON.
-- Rendered preview isolated in a sandboxed iframe.
+- Expand the editable template collection and perform cross-browser visual QA.
+- Add automated interaction and export regression coverage.
+- Isolate arbitrary community-authored code in a sandbox before accepting uploads.
+- Add versioned autosave only when the Supabase project model is introduced.
 
-Exit criterion: a designer-developer can create a real component, export it, and use it
-without manually rebuilding the result.
+Exit criterion: the v5 editor is stable enough for external creators to use without
+losing work or receiving output that differs materially from the canvas.
 
 ## Phase 3 — Supabase platform
 

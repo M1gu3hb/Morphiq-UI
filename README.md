@@ -12,9 +12,12 @@ checkpoint intentionally has no authentication, database, payments, or marketpla
 - Automatic Spanish/English localization based on the browser, with a manual switch.
 - A 24-object animated library with live text, color, and motion customization.
 - Copy-ready React/CSS, AI implementation prompts, and TSX/CSS/SVG downloads.
-- Visual studio with layers, history, devices, snapping, alignment, drag/resize,
-  material and motion controls, local save, project JSON, and JSX export.
-- Static production build deployed on Vercel.
+- Morphiq Studio v5 with nested layers, vector and mask editing, non-destructive
+  booleans, material/effect stacks, responsive auto layout, reusable components,
+  variables, variants, interactions, 3D transforms, and a property timeline.
+- Editable Clay, Glass, Skeuomorphic, Adaptive, and double-door motion templates.
+- Interactive React/CSS, standalone visual HTML/SVG, AI handoff, and lossless project JSON export.
+- Static production build prepared for the existing Vercel project; releases remain deliberate.
 - Accessibility foundations: semantic structure, keyboard-visible native controls,
   reduced-motion handling, and practical contrast.
 
@@ -59,6 +62,8 @@ to build and serve deliberate release checkpoints through the existing project
 
 - [Style and library research](docs/style-research.md)
 - [Architecture and roadmap](docs/product-roadmap.md)
+- [Morphiq Studio v5 specification](docs/studio-v5.md)
+- [Morphiq Studio v5 implementation audit](docs/studio-v5-audit.md)
 - [Repository and deployment policy](docs/operations.md)
 
 This repository is private and unlicensed. Do not redistribute its original product
