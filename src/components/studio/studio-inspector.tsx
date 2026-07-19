@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react";
 import {
   Blend,
   ChevronDown,
@@ -19,6 +19,7 @@ import {
   Variable,
 } from "lucide-react";
 import { tr, type Locale } from "@/lib/i18n";
+import { HelpButton } from "./studio-help";
 import {
   applySurfaceRecipe,
   createEffect,
@@ -153,10 +154,10 @@ function DesignInspector({ locale, node, vectorEditMode, onGeometry, onNode, onS
       <ToggleField checked={node.geometry.clipChildren} label={t("Clip child content", "Recortar contenido hijo")} onChange={(clipChildren) => onGeometry({ clipChildren })} />
       <ToggleField checked={node.geometry.mask} label={t("Use as mask", "Usar como máscara")} onChange={(mask) => onGeometry({ mask })} />
       {(node.kind === "vector" || node.kind === "boolean" || node.geometry.clipPoints.length > 0) && <button className="v5-wide-button" aria-pressed={vectorEditMode} onClick={onToggleVectorEdit} type="button">{vectorEditMode ? t("Finish point editing", "Terminar edición de puntos") : t("Edit vector / clip points", "Editar puntos vectoriales / recorte")}</button>}
-      {node.kind === "vector" && <div className="v5-vector-point-list">{node.geometry.vectorPoints.map((point, index) => <div key={point.id}><span>P{index + 1}</span><input aria-label={`${t("Point", "Punto")} ${index + 1} X`} max="100" min="0" onChange={(event) => { const vectorPoints = node.geometry.vectorPoints.map((item, itemIndex) => itemIndex === index ? { ...item, x: Number(event.target.value) } : item); onGeometry({ vectorPoints }, `geometry.vectorPoints.${index}.x`); }} type="number" value={Number(point.x.toFixed(1))} /><input aria-label={`${t("Point", "Punto")} ${index + 1} Y`} max="100" min="0" onChange={(event) => { const vectorPoints = node.geometry.vectorPoints.map((item, itemIndex) => itemIndex === index ? { ...item, y: Number(event.target.value) } : item); onGeometry({ vectorPoints }, `geometry.vectorPoints.${index}.y`); }} type="number" value={Number(point.y.toFixed(1))} /><button aria-pressed={Boolean(point.handleIn || point.handleOut)} onClick={() => { const vectorPoints = node.geometry.vectorPoints.map((item, itemIndex) => itemIndex === index ? item.handleIn || item.handleOut ? { ...item, handleIn: undefined, handleOut: undefined, corner: true } : { ...item, handleIn: { x: Math.max(0, item.x - 14), y: item.y }, handleOut: { x: Math.min(100, item.x + 14), y: item.y }, corner: false } : item); onGeometry({ vectorPoints }); }} type="button">{point.handleIn || point.handleOut ? t("Curve", "Curva") : t("Corner", "Esquina")}</button><button aria-label={t("Delete point", "Eliminar punto")} disabled={node.geometry.vectorPoints.length <= 2} onClick={() => onGeometry({ vectorPoints: node.geometry.vectorPoints.filter((_, itemIndex) => itemIndex !== index) })} type="button"><Trash2 size={9} /></button></div>)}<button className="v5-add-stop" onClick={() => onGeometry({ vectorPoints: [...node.geometry.vectorPoints, { id: createId("point"), x: 50, y: 50 }] })} type="button"><Plus size={10} /> {t("Add vector point", "Agregar punto vectorial")}</button><ToggleField checked={node.geometry.closed} label={t("Closed path", "Ruta cerrada")} onChange={(closed) => onGeometry({ closed })} /></div>}
+      {node.kind === "vector" && <div className="v5-vector-point-list">{node.geometry.vectorPoints.map((point, index) => <div key={point.id}><span>P{index + 1}</span><InlineNumberInput ariaLabel={`${t("Point", "Punto")} ${index + 1} X`} max={100} min={0} onCommit={(x) => { const vectorPoints = node.geometry.vectorPoints.map((item, itemIndex) => itemIndex === index ? { ...item, x } : item); onGeometry({ vectorPoints }, `geometry.vectorPoints.${index}.x`); }} value={point.x} /><InlineNumberInput ariaLabel={`${t("Point", "Punto")} ${index + 1} Y`} max={100} min={0} onCommit={(y) => { const vectorPoints = node.geometry.vectorPoints.map((item, itemIndex) => itemIndex === index ? { ...item, y } : item); onGeometry({ vectorPoints }, `geometry.vectorPoints.${index}.y`); }} value={point.y} /><button aria-pressed={Boolean(point.handleIn || point.handleOut)} onClick={() => { const vectorPoints = node.geometry.vectorPoints.map((item, itemIndex) => itemIndex === index ? item.handleIn || item.handleOut ? { ...item, handleIn: undefined, handleOut: undefined, corner: true } : { ...item, handleIn: { x: Math.max(0, item.x - 14), y: item.y }, handleOut: { x: Math.min(100, item.x + 14), y: item.y }, corner: false } : item); onGeometry({ vectorPoints }); }} type="button">{point.handleIn || point.handleOut ? t("Curve", "Curva") : t("Corner", "Esquina")}</button><button aria-label={t("Delete point", "Eliminar punto")} disabled={node.geometry.vectorPoints.length <= 2} onClick={() => onGeometry({ vectorPoints: node.geometry.vectorPoints.filter((_, itemIndex) => itemIndex !== index) })} type="button"><Trash2 size={9} /></button></div>)}<button className="v5-add-stop" onClick={() => onGeometry({ vectorPoints: [...node.geometry.vectorPoints, { id: createId("point"), x: 50, y: 50 }] })} type="button"><Plus size={10} /> {t("Add vector point", "Agregar punto vectorial")}</button><ToggleField checked={node.geometry.closed} label={t("Closed path", "Ruta cerrada")} onChange={(closed) => onGeometry({ closed })} /></div>}
       {node.kind === "boolean" && <SelectField<BooleanOperation> label={t("Boolean operation", "Operación booleana")} onChange={(booleanOperation) => onGeometry({ booleanOperation })} options={["union", "subtract", "intersect", "exclude"]} value={node.geometry.booleanOperation} />}
       <div className="v5-inline-actions"><button onClick={() => onGeometry({ clipPoints: [{ x: 8, y: 0 }, { x: 92, y: 0 }, { x: 100, y: 82 }, { x: 64, y: 100 }, { x: 0, y: 88 }] })} type="button">{t("Organic clip", "Recorte orgánico")}</button><button disabled={!node.geometry.clipPoints.length} onClick={() => onGeometry({ clipPoints: [] })} type="button"><RotateCcw size={11} /> {t("Reset", "Restablecer")}</button></div>
-      {node.geometry.clipPoints.length > 0 && <div className="v5-vector-point-list"><b>{t("Movable clip path", "Ruta de recorte movible")}</b>{node.geometry.clipPoints.map((point, index) => <div key={`${index}-${node.geometry.clipPoints.length}`}><span>C{index + 1}</span><input aria-label={`${t("Clip point", "Punto de recorte")} ${index + 1} X`} max="100" min="0" onChange={(event) => { const clipPoints = node.geometry.clipPoints.map((item, itemIndex) => itemIndex === index ? { ...item, x: Number(event.target.value) } : item); onGeometry({ clipPoints }, `geometry.clipPoints.${index}.x`); }} type="number" value={Number(point.x.toFixed(1))} /><input aria-label={`${t("Clip point", "Punto de recorte")} ${index + 1} Y`} max="100" min="0" onChange={(event) => { const clipPoints = node.geometry.clipPoints.map((item, itemIndex) => itemIndex === index ? { ...item, y: Number(event.target.value) } : item); onGeometry({ clipPoints }, `geometry.clipPoints.${index}.y`); }} type="number" value={Number(point.y.toFixed(1))} /><button aria-label={t("Delete clip point", "Eliminar punto de recorte")} disabled={node.geometry.clipPoints.length <= 3} onClick={() => onGeometry({ clipPoints: node.geometry.clipPoints.filter((_, itemIndex) => itemIndex !== index) })} type="button"><Trash2 size={9} /></button></div>)}<button className="v5-add-stop" onClick={() => onGeometry({ clipPoints: [...node.geometry.clipPoints, { x: 50, y: 50 }] })} type="button"><Plus size={10} /> {t("Add clip point", "Agregar punto de recorte")}</button></div>}
+      {node.geometry.clipPoints.length > 0 && <div className="v5-vector-point-list"><b>{t("Movable clip path", "Ruta de recorte movible")}</b>{node.geometry.clipPoints.map((point, index) => <div key={`${index}-${node.geometry.clipPoints.length}`}><span>C{index + 1}</span><InlineNumberInput ariaLabel={`${t("Clip point", "Punto de recorte")} ${index + 1} X`} max={100} min={0} onCommit={(x) => { const clipPoints = node.geometry.clipPoints.map((item, itemIndex) => itemIndex === index ? { ...item, x } : item); onGeometry({ clipPoints }, `geometry.clipPoints.${index}.x`); }} value={point.x} /><InlineNumberInput ariaLabel={`${t("Clip point", "Punto de recorte")} ${index + 1} Y`} max={100} min={0} onCommit={(y) => { const clipPoints = node.geometry.clipPoints.map((item, itemIndex) => itemIndex === index ? { ...item, y } : item); onGeometry({ clipPoints }, `geometry.clipPoints.${index}.y`); }} value={point.y} /><button aria-label={t("Delete clip point", "Eliminar punto de recorte")} disabled={node.geometry.clipPoints.length <= 3} onClick={() => onGeometry({ clipPoints: node.geometry.clipPoints.filter((_, itemIndex) => itemIndex !== index) })} type="button"><Trash2 size={9} /></button></div>)}<button className="v5-add-stop" onClick={() => onGeometry({ clipPoints: [...node.geometry.clipPoints, { x: 50, y: 50 }] })} type="button"><Plus size={10} /> {t("Add clip point", "Agregar punto de recorte")}</button></div>}
     </Section>
 
     {textCapable && <Section title={t("Typography", "Tipografía")}>
@@ -308,6 +309,19 @@ function ComponentInspector({ document, locale, node, onAddComponentProperty, on
   const [targetPath, setTargetPath] = useState("text");
   const [variableName, setVariableName] = useState("accent");
   const [variableType, setVariableType] = useState<VariableType>("color");
+  const targetsByType: Record<ComponentPropertyType, readonly string[]> = {
+    string: ["text", "secondaryText", "svgPath"],
+    number: ["value", "transform.width", "transform.height"],
+    color: ["style.fills.0.color", "style.typography.color"],
+    boolean: ["visible", "checked"],
+    enum: ["text", "secondaryText", "icon"],
+    image: ["style.fills.0.imageUrl"],
+    icon: ["icon"],
+  };
+  const compatibleTargets = targetsByType[propertyType];
+  const effectiveTargetPath = compatibleTargets.includes(targetPath) ? targetPath : compatibleTargets[0];
+  const canExpose = Boolean(propertyName.trim()) && !definition?.properties.some((property) => property.name.trim().toLocaleLowerCase() === propertyName.trim().toLocaleLowerCase());
+  const canAddVariable = Boolean(variableName.trim()) && !document.variables.some((variable) => variable.name.trim().toLocaleLowerCase() === variableName.trim().toLocaleLowerCase());
   const compatibleVariables = (path: string) => {
     const expected: VariableType = path === "visible" || path === "checked"
       ? "boolean"
@@ -336,15 +350,17 @@ function ComponentInspector({ document, locale, node, onAddComponentProperty, on
       })}{!definition.properties.length && <p className="v5-inspector-help">{t("This component has no exposed properties yet.", "Este componente aún no tiene propiedades expuestas.")}</p>}<button className="v5-wide-button" disabled={!Object.keys(instanceOverrides).length} onClick={() => componentOwner && onInstanceOverrides(componentOwner.id, {})} type="button"><RotateCcw size={11} /> {t("Reset instance", "Restablecer instancia")}</button></div> : <>
         <div className="v5-property-list">{definition.properties.map((property) => <div key={property.id}><div><input aria-label={t("Property name", "Nombre de propiedad")} onChange={(event) => onComponentDefinition(definition.id, { properties: definition.properties.map((item) => item.id === property.id ? { ...item, name: event.target.value } : item) })} value={property.name} /><span>{property.type} → {property.targetPath}</span>{property.type === "enum" && <input aria-label={t("Enum options separated by commas", "Opciones enum separadas por comas")} onChange={(event) => onComponentDefinition(definition.id, { properties: definition.properties.map((item) => item.id === property.id ? { ...item, options: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) } : item) })} placeholder={t("Default, Alternative", "Predeterminado, Alternativo")} value={property.options.join(", ")} />}</div><button aria-label={t("Delete exposed property", "Eliminar propiedad expuesta")} onClick={() => onComponentDefinition(definition.id, { properties: definition.properties.filter((item) => item.id !== property.id) })} type="button"><Trash2 size={10} /></button></div>)}</div>
         <TextField label={t("Property name", "Nombre de propiedad")} onChange={setPropertyName} value={propertyName} />
-        <SelectField<ComponentPropertyType> label={t("Type", "Tipo")} onChange={setPropertyType} options={["string", "number", "color", "boolean", "enum", "image", "icon"]} value={propertyType} />
-        <SelectField label={t("Target", "Destino")} onChange={setTargetPath} options={["text", "secondaryText", "visible", "value", "checked", "icon", "svgPath", "style.fills.0.color", "style.fills.0.imageUrl", "style.typography.color", "transform.width", "transform.height"] as const} value={targetPath} />
-        <button className="v5-wide-button" onClick={() => onAddComponentProperty(definition.id, propertyName, propertyType, targetPath)} type="button"><Plus size={12} /> {t("Expose property", "Exponer propiedad")}</button>
+        <SelectField<ComponentPropertyType> label={t("Type", "Tipo")} onChange={(type) => { setPropertyType(type); setTargetPath(targetsByType[type][0]); }} options={["string", "number", "color", "boolean", "enum", "image", "icon"]} value={propertyType} />
+        <SelectField label={t("Compatible target", "Destino compatible")} onChange={setTargetPath} options={compatibleTargets} value={effectiveTargetPath} />
+        {!canExpose && <p className="v5-inline-warning">{t("Use a unique, non-empty property name.", "Usa un nombre de propiedad único y no vacío.")}</p>}
+        <button className="v5-wide-button" disabled={!canExpose} onClick={() => onAddComponentProperty(definition.id, propertyName.trim(), propertyType, effectiveTargetPath)} type="button"><Plus size={12} /> {t("Expose property", "Exponer propiedad")}</button>
       </>}
     </Section>}
     <Section title={t("Design variables", "Variables de diseño")}>
       <div className="v5-variable-list">{document.variables.map((variable) => <div key={variable.id}><Variable size={11} /><input aria-label={`${variable.name} ${t("name", "nombre")}`} onChange={(event) => onVariable(variable.id, { name: event.target.value })} value={variable.name} /><VariableValue locale={locale} variable={variable} onChange={(value) => onVariable(variable.id, { value })} /><button aria-label={t("Delete variable", "Eliminar variable")} onClick={() => onDeleteVariable(variable.id)} type="button"><Trash2 size={10} /></button></div>)}</div>
       <Grid columns={2}><TextField label={t("Name", "Nombre")} onChange={setVariableName} value={variableName} /><SelectField<VariableType> label={t("Type", "Tipo")} onChange={setVariableType} options={["string", "number", "color", "boolean"]} value={variableType} /></Grid>
-      <button className="v5-wide-button" onClick={() => { const defaultValue = variableType === "color" ? "#ff8068" : variableType === "number" ? 0 : variableType === "boolean" ? false : "Text"; onAddVariable({ id: createId("variable"), name: variableName, type: variableType, value: defaultValue, defaultValue }); }} type="button"><Plus size={12} /> {t("Add variable", "Agregar variable")}</button>
+      {!canAddVariable && <p className="v5-inline-warning">{t("Use a unique, non-empty variable name.", "Usa un nombre de variable único y no vacío.")}</p>}
+      <button className="v5-wide-button" disabled={!canAddVariable} onClick={() => { const defaultValue = variableType === "color" ? "#ff8068" : variableType === "number" ? 0 : variableType === "boolean" ? false : "Text"; onAddVariable({ id: createId("variable"), name: variableName.trim(), type: variableType, value: defaultValue, defaultValue }); }} type="button"><Plus size={12} /> {t("Add variable", "Agregar variable")}</button>
     </Section>
     <Section title={t("Variable bindings", "Enlaces de variables")}>
       {["text", "secondaryText", "visible", "checked", "value", "style.fills.0.color", "style.fills.0.imageUrl", "style.typography.color", "transform.width", "transform.height"].map((path) => <label className="v5-bind-row" key={path}><span>{path}</span><select onChange={(event) => onBindVariable(path, event.target.value)} value={node.bindings[path] ?? ""}><option value="">—</option>{compatibleVariables(path).map((variable) => <option key={variable.id} value={variable.id}>{variable.name}</option>)}</select></label>)}
@@ -356,11 +372,20 @@ function InteractionsInspector({ activeVariantId, document, locale, node, onAddI
   const t = (en: string, es: string) => tr(locale, en, es);
   const interactions = document.interactions.filter((interaction) => interaction.sourceNodeId === node.id);
   const [trigger, setTrigger] = useState<TriggerType>("click");
-  const [targetVariantId, setTargetVariantId] = useState(document.variants[0]?.id ?? "base");
+  const [action, setAction] = useState<StudioInteraction["action"]>("changeVariant");
+  const [targetVariantId, setTargetVariantId] = useState(document.variants.find((variant) => variant.id !== activeVariantId)?.id ?? (activeVariantId === "base" ? document.variants[0]?.id ?? "" : "base"));
+  const [newUrl, setNewUrl] = useState("https://");
   const [variantName, setVariantName] = useState(locale === "es" ? "Nuevo estado" : "New state");
   const [connectionStart, setConnectionStart] = useState<string | null>(null);
   const variantIds = ["base", ...document.variants.map((variant) => variant.id)];
+  const targetVariantIds = variantIds.filter((id) => id !== activeVariantId);
+  const effectiveTargetVariantId = targetVariantIds.includes(targetVariantId) ? targetVariantId : targetVariantIds[0] ?? "";
   const variantLabel = (id: string) => id === "base" ? "Base" : document.variants.find((variant) => variant.id === id)?.name ?? id;
+  const actionNeedsVariant = action === "changeVariant" || action === "toggleVariant";
+  const actionNeedsVariable = action === "setVariable";
+  const actionNeedsUrl = action === "openUrl";
+  const validUrl = /^(?:https?:\/\/|mailto:|tel:)\S+/i.test(newUrl.trim());
+  const canAddInteraction = (!actionNeedsVariant || Boolean(effectiveTargetVariantId)) && (!actionNeedsVariable || document.variables.length > 0) && (!actionNeedsUrl || validUrl);
   const standardStates = [
     { name: "Hover", label: t("Hover", "Al pasar") },
     { name: "Pressed", label: t("Pressed", "Presionado") },
@@ -371,7 +396,7 @@ function InteractionsInspector({ activeVariantId, document, locale, node, onAddI
     { name: "Error", label: t("Error", "Error") },
   ];
   return <>
-    <Section actions={<button aria-label={t("Add variant", "Agregar variante")} onClick={() => onUpsertVariant({ id: createId("variant"), name: variantName, description: "", overrides: {} })} type="button"><Plus size={12} /></button>} title={t("States & variants", "Estados y variantes")}>
+    <Section actions={<button aria-label={t("Add variant", "Agregar variante")} disabled={!variantName.trim()} onClick={() => onUpsertVariant({ id: createId("variant"), name: variantName.trim(), description: "", overrides: {} })} type="button"><Plus size={12} /></button>} title={t("States & variants", "Estados y variantes")}>
       <TextField label={t("New variant name", "Nombre de nueva variante")} onChange={setVariantName} value={variantName} />
       <div className="v5-standard-states">{standardStates.map(({ label, name }) => <button disabled={document.variants.some((variant) => variant.name.toLowerCase() === name.toLowerCase())} key={name} onClick={() => onUpsertVariant({ id: createId("variant"), name, description: t(`${name} component state`, `Estado ${label.toLowerCase()} del componente`), overrides: {} })} type="button">+ {label}</button>)}</div>
       <div className="v5-variant-list">
@@ -389,8 +414,14 @@ function InteractionsInspector({ activeVariantId, document, locale, node, onAddI
       </div>
       <p className="v5-inspector-help">{t("Edit the selected variant directly on the canvas. Base geometry stays untouched.", "Edita la variante seleccionada directamente en el lienzo. La geometría base permanece intacta.")}</p>
     </Section>
-    <Section actions={<button aria-label={t("Add interaction", "Agregar interacción")} onClick={() => onAddInteraction({ id: createId("interaction"), sourceNodeId: node.id, sourceVariantId: activeVariantId, trigger, action: "changeVariant", targetVariantId, delay: 0, key: "Enter", transition: "smart", duration: 0.35, easing: "easeInOut" })} type="button"><Plus size={12} /></button>} title={t("Prototype connections", "Conexiones de prototipo")}>
-      <Grid columns={2}><SelectField<TriggerType> label={t("Trigger", "Disparador")} onChange={setTrigger} options={["click", "doubleClick", "hover", "hoverEnd", "focus", "blur", "mouseDown", "mouseUp", "drag", "swipe", "scroll", "key", "load", "delay", "variable"]} value={trigger} /><SelectField label={t("Target", "Destino")} onChange={setTargetVariantId} options={variantIds} render={variantLabel} value={targetVariantId} /></Grid>
+    <Section actions={<button aria-label={t("Add configured interaction", "Agregar interacción configurada")} disabled={!canAddInteraction} onClick={() => onAddInteraction({ id: createId("interaction"), sourceNodeId: node.id, sourceVariantId: activeVariantId, trigger, action, targetVariantId: actionNeedsVariant ? effectiveTargetVariantId : undefined, variableId: actionNeedsVariable ? document.variables[0]?.id : undefined, value: actionNeedsVariable ? document.variables[0]?.value : undefined, url: actionNeedsUrl ? newUrl.trim() : undefined, delay: 0, key: "Enter", transition: "smart", duration: 0.35, easing: "easeInOut" })} type="button"><Plus size={12} /></button>} title={t("Prototype connections", "Conexiones de prototipo")}>
+      <SelectField<TriggerType> label={t("Trigger", "Disparador")} onChange={setTrigger} options={["click", "doubleClick", "hover", "hoverEnd", "focus", "blur", "mouseDown", "mouseUp", "drag", "swipe", "scroll", "key", "load", "delay", "variable"]} value={trigger} />
+      <SelectField label={t("Action", "Acción")} onChange={setAction} options={["changeVariant", "toggleVariant", "setVariable", "playTimeline", "pauseTimeline", "reverseTimeline", "openUrl"] as const} value={action} />
+      {actionNeedsVariant && <SelectField label={t("Target state (must be different)", "Estado destino (debe ser diferente)")} onChange={setTargetVariantId} options={targetVariantIds} render={variantLabel} value={effectiveTargetVariantId} />}
+      {actionNeedsUrl && <TextField label={t("Safe URL (https, mailto or tel)", "URL segura (https, mailto o tel)")} onChange={setNewUrl} value={newUrl} />}
+      {actionNeedsUrl && !validUrl && <p className="v5-inline-warning">{t("Enter a complete, supported URL before adding the interaction.", "Escribe una URL completa y compatible antes de agregar la interacción.")}</p>}
+      {actionNeedsVariant && !targetVariantIds.length && <p className="v5-inline-warning">{t("Create another state before adding this interaction.", "Crea otro estado antes de agregar esta interacción.")}</p>}
+      {actionNeedsVariable && !document.variables.length && <p className="v5-inline-warning">{t("Create a variable in the Component tab first.", "Crea primero una variable en la pestaña Componente.")}</p>}
       <div className="v5-interaction-list">{interactions.map((interaction) => <div key={interaction.id}>
         <div className="v5-interaction-title"><Link2 size={11} /><b>{interaction.trigger}</b><span>→ {interaction.action}</span><button aria-label={t("Delete interaction", "Eliminar interacción")} onClick={() => onDeleteInteraction(interaction.id)} type="button"><Trash2 size={10} /></button></div>
         <SelectField label={t("Trigger", "Disparador")} onChange={(nextTrigger) => onInteraction(interaction.id, { trigger: nextTrigger })} options={["click", "doubleClick", "hover", "hoverEnd", "focus", "blur", "mouseDown", "mouseUp", "drag", "swipe", "scroll", "key", "load", "delay", "variable"] as const} value={interaction.trigger} />
@@ -437,7 +468,7 @@ function GradientEditor({ locale, stops, onChange }: { locale: Locale; stops: Pa
     const key = Object.keys(patch)[0] as "color" | "position" | "opacity" | undefined;
     onChange(stops.map((stop) => stop.id === id ? { ...stop, ...patch } : stop), index >= 0 && key ? { index, key } : undefined);
   }
-  return <div className="v5-gradient-editor"><div className="v5-gradient-preview" style={{ background: `linear-gradient(90deg, ${[...stops].sort((a, b) => a.position - b.position).map((stop) => `${stop.color} ${stop.position}%`).join(", ")})` }} />{stops.map((stop) => <div className="v5-gradient-stop" key={stop.id}><input aria-label={t("Stop color", "Color del punto")} onChange={(event) => update(stop.id, { color: event.target.value })} type="color" value={safeColor(stop.color)} /><input aria-label={t("Stop position", "Posición del punto")} max="100" min="0" onChange={(event) => update(stop.id, { position: Number(event.target.value) })} type="number" value={stop.position} /><span>%</span><input aria-label={t("Stop opacity", "Opacidad del punto")} max="100" min="0" onChange={(event) => update(stop.id, { opacity: Number(event.target.value) })} type="number" value={stop.opacity} /><span>%</span><button aria-label={t("Delete stop", "Eliminar punto")} disabled={stops.length <= 2} onClick={() => onChange(stops.filter((item) => item.id !== stop.id))} type="button"><Minus size={10} /></button></div>)}<button className="v5-add-stop" onClick={() => onChange([...stops, createGradientStop("#ffffff", 50)])} type="button"><Plus size={11} /> {t("Add color stop", "Agregar punto de color")}</button></div>;
+  return <div className="v5-gradient-editor"><div className="v5-gradient-preview" style={{ background: `linear-gradient(90deg, ${[...stops].sort((a, b) => a.position - b.position).map((stop) => `${stop.color} ${stop.position}%`).join(", ")})` }} />{stops.map((stop) => <div className="v5-gradient-stop" key={stop.id}><input aria-label={t("Stop color", "Color del punto")} onChange={(event) => update(stop.id, { color: event.target.value })} type="color" value={safeColor(stop.color)} /><InlineNumberInput ariaLabel={t("Stop position", "Posición del punto")} max={100} min={0} onCommit={(position) => update(stop.id, { position })} value={stop.position} /><span>%</span><InlineNumberInput ariaLabel={t("Stop opacity", "Opacidad del punto")} max={100} min={0} onCommit={(opacity) => update(stop.id, { opacity })} value={stop.opacity} /><span>%</span><button aria-label={t("Delete stop", "Eliminar punto")} disabled={stops.length <= 2} onClick={() => onChange(stops.filter((item) => item.id !== stop.id))} type="button"><Minus size={10} /></button></div>)}<button className="v5-add-stop" onClick={() => onChange([...stops, createGradientStop("#ffffff", 50)])} type="button"><Plus size={11} /> {t("Add color stop", "Agregar punto de color")}</button></div>;
 }
 
 function ImageFillEditor({ locale, paint, onChange, onMode }: { locale: Locale; paint: Paint; onChange: (url: string) => void; onMode: (mode: Paint["imageMode"]) => void }) {
@@ -449,7 +480,8 @@ function VariableValue({ locale, variable, onChange }: { locale: Locale; variabl
   const label = `${variable.name} ${tr(locale, "value", "valor")}`;
   if (variable.type === "boolean") return <input aria-label={label} checked={Boolean(variable.value)} onChange={(event) => onChange(event.target.checked)} type="checkbox" />;
   if (variable.type === "color") return <input aria-label={label} onChange={(event) => onChange(event.target.value)} type="color" value={safeColor(String(variable.value))} />;
-  return <input aria-label={label} onChange={(event) => onChange(variable.type === "number" ? Number(event.target.value) : event.target.value)} type={variable.type === "number" ? "number" : "text"} value={String(variable.value)} />;
+  if (variable.type === "number") return <InlineNumberInput ariaLabel={label} onCommit={onChange} value={Number(variable.value)} />;
+  return <input aria-label={label} onChange={(event) => onChange(event.target.value)} type="text" value={String(variable.value)} />;
 }
 
 function CheckRow({ ok, text }: { ok: boolean; text: string }) { return <div className={`v5-check-row ${ok ? "ok" : "warn"}`}><i>{ok ? "✓" : "!"}</i><span>{text}</span></div>; }
@@ -463,21 +495,50 @@ function PivotGrid({ locale, x, y, onChange }: { locale: Locale; x: number; y: n
   return <div className="v5-pivot-grid">{[0, 50, 100].flatMap((py) => [0, 50, 100].map((px) => <button aria-label={`${tr(locale, "Pivot", "Pivote")} ${px} ${py}`} aria-pressed={Math.abs(x - px) < 1 && Math.abs(y - py) < 1} key={`${px}-${py}`} onClick={() => onChange(px, py)} type="button"><i /></button>))}</div>;
 }
 
-function Section({ actions, children, title }: { actions?: ReactNode; children: ReactNode; title: string }) { return <section className="v5-inspector-section"><div className="v5-section-title"><span>{title}</span>{actions}</div>{children}</section>; }
+function InlineNumberInput({ ariaLabel, max, min, onCommit, step = 1, value }: { ariaLabel: string; max?: number; min?: number; onCommit: (value: number) => void; step?: number; value: number }) {
+  const formatted = Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+  const commit = (event: FocusEvent<HTMLInputElement>) => {
+    const parsed = Number(event.currentTarget.value);
+    if (!Number.isFinite(parsed) || event.currentTarget.value.trim() === "") { event.currentTarget.value = formatted; return; }
+    const next = Math.max(min ?? -Infinity, Math.min(max ?? Infinity, parsed));
+    event.currentTarget.value = String(next);
+    if (next !== value) onCommit(next);
+  };
+  return <input aria-label={ariaLabel} defaultValue={formatted} key={formatted} max={max} min={min} onBlur={commit} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { event.currentTarget.value = formatted; event.currentTarget.blur(); } }} step={step} type="number" />;
+}
+
+function Section({ actions, children, title }: { actions?: ReactNode; children: ReactNode; title: string }) {
+  const advanced = /3D|optical|ópticos|instance properties|propiedades de instancia|exposed properties|propiedades expuestas|variable bindings|enlaces de variables/i.test(title);
+  return <section className="v5-inspector-section" data-advanced={advanced || undefined}><div className="v5-section-title"><span>{title}</span><div className="v5-section-actions">{actions}<HelpButton label={title} /></div></div>{children}</section>;
+}
 function Grid({ children, columns }: { children: ReactNode; columns: number }) { return <div className="v5-control-grid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>{children}</div>; }
 
 function NumberField({ label, max, min, onChange, step = 1, suffix = "", value }: { label: string; max?: number; min?: number; onChange: (value: number) => void; step?: number; suffix?: string; value: number }) {
-  return <label className="v5-number-field"><span>{label}</span><div><input max={max} min={min} onChange={(event) => { const next = Number(event.target.value); onChange(Math.max(min ?? -Infinity, Math.min(max ?? Infinity, Number.isFinite(next) ? next : 0))); }} step={step} type="number" value={Number.isInteger(value) ? value : Number(value.toFixed(2))} />{suffix && <small>{suffix}</small>}</div></label>;
+  const formatted = Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+  const commit = (event: FocusEvent<HTMLInputElement>) => {
+    const draft = event.currentTarget.value;
+    if (draft.trim() === "" || draft === "-" || draft === "." || draft === "-.") { event.currentTarget.value = formatted; return; }
+    const parsed = Number(draft);
+    if (!Number.isFinite(parsed)) { event.currentTarget.value = formatted; return; }
+    const next = Math.max(min ?? -Infinity, Math.min(max ?? Infinity, parsed));
+    event.currentTarget.value = String(next);
+    if (next !== value) onChange(next);
+  };
+  const keyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") event.currentTarget.blur();
+    if (event.key === "Escape") { event.currentTarget.value = formatted; event.currentTarget.blur(); }
+  };
+  return <label className="v5-number-field"><span><i>{label}</i><HelpButton label={label} /></span><div><input defaultValue={formatted} key={formatted} max={max} min={min} onBlur={commit} onKeyDown={keyDown} step={step} type="number" />{suffix && <small>{suffix}</small>}</div></label>;
 }
 function RangeControl({ label, max, min, onChange, step = 1, suffix = "", value }: { label: string; max: number; min: number; onChange: (value: number) => void; step?: number; suffix?: string; value: number }) {
-  return <label className="v5-range-field"><span>{label}<b>{Number.isInteger(value) ? value : Number(value.toFixed(2))}{suffix}</b></span><input max={max} min={min} onChange={(event) => onChange(Number(event.target.value))} step={step} type="range" value={value} /></label>;
+  return <label className="v5-range-field"><span><i>{label}<HelpButton label={label} /></i><b>{Number.isInteger(value) ? value : Number(value.toFixed(2))}{suffix}</b></span><input max={max} min={min} onChange={(event) => onChange(Number(event.target.value))} step={step} type="range" value={value} /></label>;
 }
-function TextField({ label, onChange, value }: { label: string; onChange: (value: string) => void; value: string }) { return <label className="v5-text-field"><span>{label}</span><input onChange={(event) => onChange(event.target.value)} type="text" value={value} /></label>; }
-function TextArea({ label, onChange, value }: { label: string; onChange: (value: string) => void; value: string }) { return <label className="v5-text-field"><span>{label}</span><textarea onChange={(event) => onChange(event.target.value)} rows={2} value={value} /></label>; }
+function TextField({ label, onChange, value }: { label: string; onChange: (value: string) => void; value: string }) { return <label className="v5-text-field"><span><i>{label}</i><HelpButton label={label} /></span><input onChange={(event) => onChange(event.target.value)} type="text" value={value} /></label>; }
+function TextArea({ label, onChange, value }: { label: string; onChange: (value: string) => void; value: string }) { return <label className="v5-text-field"><span><i>{label}</i><HelpButton label={label} /></span><textarea onChange={(event) => onChange(event.target.value)} rows={2} value={value} /></label>; }
 function safeColor(value: string) { return /^#[0-9a-f]{6}$/i.test(value) ? value : "#ffffff"; }
-function ColorField({ label, onChange, value }: { label: string; onChange: (value: string) => void; value: string }) { return <label className="v5-color-field"><span>{label}</span><div><input onChange={(event) => onChange(event.target.value)} type="color" value={safeColor(value)} /><input aria-label={`${label} value`} onChange={(event) => onChange(event.target.value)} value={value} /></div></label>; }
-function ToggleField({ checked, label, onChange }: { checked: boolean; label: string; onChange: (value: boolean) => void }) { return <label className="v5-toggle-field"><span>{label}</span><button aria-checked={checked} onClick={() => onChange(!checked)} role="switch" type="button"><i /></button></label>; }
+function ColorField({ label, onChange, value }: { label: string; onChange: (value: string) => void; value: string }) { return <label className="v5-color-field"><span><i>{label}</i><HelpButton label={label} /></span><div><input onChange={(event) => onChange(event.target.value)} type="color" value={safeColor(value)} /><input aria-label={`${label} value`} onChange={(event) => onChange(event.target.value)} value={value} /></div></label>; }
+function ToggleField({ checked, label, onChange }: { checked: boolean; label: string; onChange: (value: boolean) => void }) { return <label className="v5-toggle-field"><span><i>{label}</i><HelpButton label={label} /></span><button aria-checked={checked} onClick={() => onChange(!checked)} role="switch" type="button"><i /></button></label>; }
 
 function SelectField<const T extends string>({ label, onChange, options, render, value }: { label: string; onChange: (value: T) => void; options: readonly T[]; render?: (value: T) => string; value: T }) {
-  return <label className="v5-select-field"><span>{label}</span><select onChange={(event) => onChange(event.target.value as T)} value={value}>{options.map((option) => <option key={option} value={option}>{render ? render(option) : option}</option>)}</select></label>;
+  return <label className="v5-select-field"><span><i>{label}</i><HelpButton label={label} /></span><select onChange={(event) => onChange(event.target.value as T)} value={value}>{options.map((option) => <option key={option} value={option}>{render ? render(option) : option}</option>)}</select></label>;
 }

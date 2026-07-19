@@ -58,6 +58,7 @@ import {
 } from "lucide-react";
 import { tr, type Locale } from "@/lib/i18n";
 import { StudioInspector } from "./studio-inspector";
+import { HelpButton, Helpable, StudioHelpProvider } from "./studio-help";
 import { StudioLayerTree } from "./studio-layers";
 import {
   animatableProperties,
@@ -261,7 +262,7 @@ function cleanupRemovedNodeReferences(document: StudioDocument, nodes: StudioNod
 }
 
 function groupNodesInDocument(document: StudioDocument, ids: string[], kind: "group" | "boolean" = "group", operation: BooleanOperation = "union") {
-  const selected = document.nodes.filter((node) => ids.includes(node.id));
+  const selected = [...new Set(ids)].map((id) => document.nodes.find((node) => node.id === id)).filter((node): node is StudioNode => Boolean(node));
   if (!selected.length) return null;
   const parentId = selected[0].parentId;
   if (!selected.every((node) => node.parentId === parentId)) return null;
@@ -301,6 +302,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
   const [selectedKeyframeIds, setSelectedKeyframeIds] = useState<Set<string>>(new Set());
   const [leftTab, setLeftTab] = useState<LeftTab>("add");
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("design");
+  const [inspectorMode, setInspectorMode] = useState<"basic" | "advanced">("basic");
   const [activeTool, setActiveTool] = useState<StudioTool>("select");
   const [activeVariantId, setActiveVariantId] = useState("base");
   const [previewMode, setPreviewMode] = useState(false);
@@ -308,6 +310,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
   const [playing, setPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0);
   const [zoom, setZoom] = useState(88);
+  const [guides, setGuides] = useState({ x: initialDocument.canvas.width / 2, y: initialDocument.canvas.height / 2 });
   const [search, setSearch] = useState("");
   const [timelineOpen, setTimelineOpen] = useState(true);
   const [showExport, setShowExport] = useState(false);
@@ -323,6 +326,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const variableSnapshotRef = useRef("");
   const suppressVariableReactionRef = useRef(false);
+  const historyGroupRef = useRef<{ key: string; time: number } | null>(null);
 
   const structuralNodeMap = useMemo(() => new Map(project.nodes.map((node) => [node.id, node])), [project.nodes]);
   const activeVariant = project.variants.find((variant) => variant.id === activeVariantId);
@@ -390,12 +394,15 @@ export function StudioShell({ locale }: { locale: Locale }) {
     return JSON.stringify(project, null, 2);
   }, [exportTab, project, selectedIds]);
 
-  const commit = useCallback((next: StudioDocument, history = true) => {
+  const commit = useCallback((next: StudioDocument, history = true, historyGroup?: string) => {
     if (JSON.stringify(next) === JSON.stringify(project)) return;
     const stamped = { ...next, updatedAt: new Date().toISOString() };
-    if (history) setPast((current) => [...current, project].slice(-100));
+    const now = Date.now();
+    const grouped = Boolean(history && historyGroup && historyGroupRef.current?.key === historyGroup && now - historyGroupRef.current.time < 700);
+    if (history && !grouped) setPast((current) => [...current, project].slice(-100));
     setProject(stamped);
-    if (history) setFuture([]);
+    if (history && !grouped) setFuture([]);
+    historyGroupRef.current = historyGroup ? { key: historyGroup, time: now } : null;
   }, [project]);
 
   useEffect(() => {
@@ -472,6 +479,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
     setPast((current) => current.slice(0, -1));
     setFuture((current) => [project, ...current].slice(0, 100));
     setProject(previous);
+    historyGroupRef.current = null;
     setSelectedIds((current) => current.filter((id) => previous.nodes.some((node) => node.id === id)).slice(0, 1));
   }
 
@@ -481,12 +489,27 @@ export function StudioShell({ locale }: { locale: Locale }) {
     setFuture((current) => current.slice(1));
     setPast((current) => [...current, project].slice(-100));
     setProject(next);
+    historyGroupRef.current = null;
   }
 
   function applyNodeMutation(nodeId: string, patch: NodeOverride, property?: AnimatableProperty | AnimatableProperty[]) {
     const base = structuralNodeMap.get(nodeId);
     if (!base) return;
     const next = deepClone(project);
+    const properties = property ? (Array.isArray(property) ? property : [property]) : [];
+    if (activeVariantId === "base" && properties.length) {
+      const blockedPath = properties.find((path) => {
+        const track = next.timeline.tracks.find((candidate) => !candidate.variableId && candidate.nodeId === nodeId && candidate.property === path);
+        if (!track || next.timeline.autoKey) return false;
+        return !track.keyframes.some((frame) => Math.abs(frame.time - playhead) < .001);
+      });
+      if (blockedPath) {
+        setPlaying(false);
+        setNotice(t("This property is animated. Move to a keyframe or enable Auto-key before editing it.", "Esta propiedad está animada. Ve a un keyframe o activa Auto-key antes de editarla."));
+        return;
+      }
+    }
+    setPlaying(false);
     let changedNode: StudioNode;
     if (activeVariantId === "base") {
       next.nodes = next.nodes.map((node) => node.id === nodeId ? mergeNodeOverride(node, patch) : node);
@@ -495,18 +518,60 @@ export function StudioShell({ locale }: { locale: Locale }) {
       next.variants = next.variants.map((variant) => variant.id === activeVariantId ? { ...variant, overrides: { ...variant.overrides, [nodeId]: mergeOverride(variant.overrides[nodeId], patch) } } : variant);
       changedNode = mergeNodeOverride(base, next.variants.find((variant) => variant.id === activeVariantId)?.overrides[nodeId]);
     }
-    if (property && next.timeline.autoKey) {
-      const properties = Array.isArray(property) ? property : [property];
-      properties.forEach((path) => { next.timeline = upsertKeyframe(next.timeline, changedNode, path, playhead, getPathValue(changedNode, path)); });
+    if (properties.length) {
+      properties.forEach((path) => {
+        const track = next.timeline.tracks.find((candidate) => !candidate.variableId && candidate.nodeId === nodeId && candidate.property === path);
+        const exactFrame = track?.keyframes.some((frame) => Math.abs(frame.time - playhead) < .001);
+        if (next.timeline.autoKey || exactFrame) next.timeline = upsertKeyframe(next.timeline, changedNode, path, playhead, getPathValue(changedNode, path));
+      });
     }
-    commit(next);
+    const patchKey = properties.length ? properties.join("+") : Object.entries(patch).flatMap(([group, value]) => value && typeof value === "object" && !Array.isArray(value) ? Object.keys(value).map((key) => `${group}.${key}`) : [group]).join("+");
+    commit(next, true, `node:${nodeId}:${activeVariantId}:${patchKey}`);
   }
 
   function updateNode(patch: Partial<StudioNode>, property?: AnimatableProperty) {
     if (!selected) return;
     applyNodeMutation(selected.id, patch, property);
   }
-  function updateTransform(patch: Partial<NodeTransform>, property?: AnimatableProperty) { if (selected) applyNodeMutation(selected.id, { transform: patch }, property); }
+  function applyTransformBatch(updates: Map<string, Partial<NodeTransform>>, properties: AnimatableProperty[], historyKey: string) {
+    if (!updates.size) return;
+    const next = deepClone(project);
+    const responsiveKeys = new Set<keyof NodeTransform>(["x", "y", "width", "height"]);
+    const blocked = [...updates.keys()].some((nodeId) => properties.some((path) => {
+      const track = next.timeline.tracks.find((candidate) => !candidate.variableId && candidate.nodeId === nodeId && candidate.property === path);
+      return activeVariantId === "base" && Boolean(track) && !next.timeline.autoKey && !track!.keyframes.some((frame) => Math.abs(frame.time - playhead) < .001);
+    }));
+    if (blocked) {
+      setPlaying(false);
+      setNotice(t("This transform is animated. Move to a keyframe or enable Auto-key before editing it.", "Esta transformación está animada. Ve a un keyframe o activa Auto-key antes de editarla."));
+      return;
+    }
+    setPlaying(false);
+    updates.forEach((transform, nodeId) => {
+      const base = next.nodes.find((node) => node.id === nodeId);
+      if (!base || base.locked) return;
+      const hasMotion = properties.some((path) => next.timeline.tracks.some((track) => !track.variableId && track.nodeId === nodeId && track.property === path));
+      const responsiveEdit = activeVariantId === "base" && project.canvas.device !== "desktop" && !hasMotion && Object.keys(transform).every((key) => responsiveKeys.has(key as keyof NodeTransform));
+      let changedNode: StudioNode;
+      if (activeVariantId !== "base") {
+        next.variants = next.variants.map((variant) => variant.id === activeVariantId ? { ...variant, overrides: { ...variant.overrides, [nodeId]: mergeOverride(variant.overrides[nodeId], { transform }) } } : variant);
+        changedNode = mergeNodeOverride(base, next.variants.find((variant) => variant.id === activeVariantId)?.overrides[nodeId]);
+      } else if (responsiveEdit) {
+        next.nodes = next.nodes.map((node) => node.id === nodeId ? { ...node, responsive: { ...node.responsive, [project.canvas.device]: { ...node.responsive[project.canvas.device], transform: { ...node.responsive[project.canvas.device].transform, ...transform } } } } : node);
+        changedNode = resolveResponsiveNode(next.nodes.find((node) => node.id === nodeId)!, project.canvas.device);
+      } else {
+        next.nodes = next.nodes.map((node) => node.id === nodeId ? { ...node, transform: { ...node.transform, ...transform } } : node);
+        changedNode = next.nodes.find((node) => node.id === nodeId)!;
+      }
+      if (!responsiveEdit && activeVariantId === "base") properties.forEach((path) => {
+        const track = next.timeline.tracks.find((candidate) => !candidate.variableId && candidate.nodeId === nodeId && candidate.property === path);
+        const exactFrame = track?.keyframes.some((frame) => Math.abs(frame.time - playhead) < .001);
+        if (next.timeline.autoKey || exactFrame) next.timeline = upsertKeyframe(next.timeline, changedNode, path, playhead, getPathValue(changedNode, path));
+      });
+    });
+    commit(next, true, historyKey);
+  }
+  function updateTransform(patch: Partial<NodeTransform>, property?: AnimatableProperty) { if (selected) applyTransformBatch(new Map([[selected.id, patch]]), property ? [property] : [], `transform:${selected.id}:${activeVariantId}:${Object.keys(patch).join("+")}`); }
   function updateGeometry(patch: Partial<NodeGeometry>, property?: AnimatableProperty) { if (selected) applyNodeMutation(selected.id, { geometry: patch }, property); }
   function updateStyle(patch: Partial<NodeStyle>, property?: AnimatableProperty) { if (selected) applyNodeMutation(selected.id, { style: patch }, property); }
   function updateLayout(patch: Partial<NodeLayout>) { if (selected) applyNodeMutation(selected.id, { layout: patch }); }
@@ -521,7 +586,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
   function updateResponsive(device: Device, override: ResponsiveOverride | null) {
     if (!selected) return;
     const source = structuralNodeMap.get(selected.id)!;
-    commit({ ...project, nodes: project.nodes.map((node) => node.id === selected.id ? { ...node, responsive: { ...source.responsive, [device]: override ?? {} } } : node) });
+    commit({ ...project, nodes: project.nodes.map((node) => node.id === selected.id ? { ...node, responsive: { ...source.responsive, [device]: override ?? {} } } : node) }, true, `responsive:${selected.id}:${device}`);
   }
 
   function selectLayer(id: string, additive = false, range = false) {
@@ -665,21 +730,23 @@ export function StudioShell({ locale }: { locale: Locale }) {
 
   function alignSelection(position: "left" | "centerX" | "right" | "top" | "centerY" | "bottom") {
     if (!selectedIds.length) return;
-    const selectedNodes = project.nodes.filter((node) => selectedIds.includes(node.id));
+    const selectedNodes = resolvedNodes.filter((node) => selectedIds.includes(node.id));
     const sameParent = selectedNodes.every((node) => node.parentId === selectedNodes[0].parentId);
-    if (!sameParent) return;
-    const parent = selectedNodes[0].parentId ? structuralNodeMap.get(selectedNodes[0].parentId) : null;
+    if (!sameParent) { setNotice(t("Select layers with the same parent before aligning them", "Selecciona capas con el mismo padre antes de alinearlas")); return; }
+    const parent = selectedNodes[0].parentId ? resolvedNodeMap.get(selectedNodes[0].parentId) : null;
     const bounds = selectedNodes.length === 1 ? { x: 0, y: 0, width: parent?.transform.width ?? project.canvas.width, height: parent?.transform.height ?? project.canvas.height } : { x: Math.min(...selectedNodes.map((node) => node.transform.x)), y: Math.min(...selectedNodes.map((node) => node.transform.y)), width: Math.max(...selectedNodes.map((node) => node.transform.x + node.transform.width)) - Math.min(...selectedNodes.map((node) => node.transform.x)), height: Math.max(...selectedNodes.map((node) => node.transform.y + node.transform.height)) - Math.min(...selectedNodes.map((node) => node.transform.y)) };
-    const nodes = project.nodes.map((node) => {
-      if (!selectedIds.includes(node.id) || node.locked) return node;
-      if (position === "left") return { ...node, transform: { ...node.transform, x: bounds.x } };
-      if (position === "centerX") return { ...node, transform: { ...node.transform, x: bounds.x + (bounds.width - node.transform.width) / 2 } };
-      if (position === "right") return { ...node, transform: { ...node.transform, x: bounds.x + bounds.width - node.transform.width } };
-      if (position === "top") return { ...node, transform: { ...node.transform, y: bounds.y } };
-      if (position === "centerY") return { ...node, transform: { ...node.transform, y: bounds.y + (bounds.height - node.transform.height) / 2 } };
-      return { ...node, transform: { ...node.transform, y: bounds.y + bounds.height - node.transform.height } };
+    const updates = new Map<string, Partial<NodeTransform>>();
+    selectedNodes.forEach((node) => {
+      if (node.locked) return;
+      if (position === "left") updates.set(node.id, { x: bounds.x });
+      else if (position === "centerX") updates.set(node.id, { x: bounds.x + (bounds.width - node.transform.width) / 2 });
+      else if (position === "right") updates.set(node.id, { x: bounds.x + bounds.width - node.transform.width });
+      else if (position === "top") updates.set(node.id, { y: bounds.y });
+      else if (position === "centerY") updates.set(node.id, { y: bounds.y + (bounds.height - node.transform.height) / 2 });
+      else updates.set(node.id, { y: bounds.y + bounds.height - node.transform.height });
     });
-    commit({ ...project, nodes });
+    const property = position === "left" || position === "centerX" || position === "right" ? "transform.x" : "transform.y";
+    applyTransformBatch(updates, [property], `align:${activeVariantId}:${project.canvas.device}:${position}`);
   }
 
   function moveLayer(direction: -1 | 1) {
@@ -755,8 +822,25 @@ export function StudioShell({ locale }: { locale: Locale }) {
   }
 
   function addComponentProperty(componentId: string, name: string, type: ComponentPropertyType, targetPath: string) {
+    const definition = project.components.find((component) => component.id === componentId);
+    if (!definition || !name.trim() || definition.properties.some((property) => property.name.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase())) { setNotice(t("Use a unique property name", "Usa un nombre de propiedad único")); return; }
+    const validTargets: Record<ComponentPropertyType, readonly string[]> = { string: ["text", "secondaryText", "svgPath"], number: ["value", "transform.width", "transform.height"], color: ["style.fills.0.color", "style.typography.color"], boolean: ["visible", "checked"], enum: ["text", "secondaryText", "icon"], image: ["style.fills.0.imageUrl"], icon: ["icon"] };
+    if (!validTargets[type].includes(targetPath)) { setNotice(t("That target is not compatible with the property type", "Ese destino no es compatible con el tipo de propiedad")); return; }
     const value = selected ? getPathValue(selected, targetPath as AnimatableProperty) : "";
-    commit({ ...project, components: project.components.map((component) => component.id === componentId ? { ...component, properties: [...component.properties, { id: createId("property"), name, type, targetNodeId: selected?.id ?? component.rootNodeId, targetPath, defaultValue: value, options: type === "enum" ? ["Default", "Alternative"] : [] }] } : component) });
+    commit({ ...project, components: project.components.map((component) => component.id === componentId ? { ...component, properties: [...component.properties, { id: createId("property"), name: name.trim(), type, targetNodeId: selected?.id ?? component.rootNodeId, targetPath, defaultValue: value, options: type === "enum" ? ["Default", "Alternative"] : [] }] } : component) });
+  }
+
+  function addVariable(variable: StudioVariable) {
+    const name = variable.name.trim();
+    if (!name || project.variables.some((candidate) => candidate.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase())) { setNotice(t("Use a unique variable name", "Usa un nombre de variable único")); return; }
+    commit({ ...project, variables: [...project.variables, { ...variable, name }] });
+  }
+
+  function addInteraction(interaction: StudioInteraction) {
+    if ((interaction.action === "changeVariant" || interaction.action === "toggleVariant") && (!interaction.targetVariantId || interaction.targetVariantId === interaction.sourceVariantId)) { setNotice(t("Choose a different target state", "Elige un estado destino diferente")); return; }
+    if (interaction.action === "setVariable" && !project.variables.some((variable) => variable.id === interaction.variableId)) { setNotice(t("Choose a valid variable", "Elige una variable válida")); return; }
+    if (interaction.action === "openUrl" && !/^(?:https?:\/\/|mailto:|tel:)\S+/i.test(interaction.url ?? "")) { setNotice(t("Enter a complete, supported URL", "Escribe una URL completa y compatible")); return; }
+    commit({ ...project, interactions: [...project.interactions, interaction] });
   }
 
   function updateComponentDefinition(componentId: string, patch: Partial<ComponentDefinition>) {
@@ -771,15 +855,19 @@ export function StudioShell({ locale }: { locale: Locale }) {
         ...node,
         instanceOverrides: Object.fromEntries(Object.entries(node.instanceOverrides).filter(([propertyId]) => propertyIds.has(propertyId))),
       } : node),
-    });
+    }, true, `component:${componentId}:${Object.keys(patch).join("+")}`);
   }
 
   function addVariant(variant?: SceneVariant) {
     if (!variant) return;
-    commit({ ...project, variants: [...project.variants, variant], components: project.components.map((component) => ({ ...component, variantIds: [...new Set([...component.variantIds, variant.id])] })) });
+    const name = variant.name.trim();
+    if (!name) { setNotice(t("Give the state a name first", "Primero dale un nombre al estado")); return; }
+    if (project.variants.some((candidate) => candidate.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase())) { setNotice(t("A state with that name already exists", "Ya existe un estado con ese nombre")); return; }
+    const normalized = { ...variant, name };
+    commit({ ...project, variants: [...project.variants, normalized], components: project.components.map((component) => ({ ...component, variantIds: [...new Set([...component.variantIds, normalized.id])] })) });
     setPlaying(false);
     setPlayhead(project.timeline.workArea[0]);
-    setActiveVariantId(variant.id);
+    setActiveVariantId(normalized.id);
   }
 
   function deleteVariant(id: string) {
@@ -901,7 +989,9 @@ export function StudioShell({ locale }: { locale: Locale }) {
         const step = event.shiftKey ? 10 : 1;
         const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
         const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
-        commit({ ...project, nodes: project.nodes.map((node) => selectedIds.includes(node.id) && !node.locked ? { ...node, transform: { ...node.transform, x: node.transform.x + dx, y: node.transform.y + dy } } : node) });
+        const updates = new Map<string, Partial<NodeTransform>>();
+        resolvedNodes.filter((node) => selectedIds.includes(node.id) && !node.locked).forEach((node) => updates.set(node.id, { x: node.transform.x + dx, y: node.transform.y + dy }));
+        applyTransformBatch(updates, ["transform.x", "transform.y"], `nudge:${activeVariantId}:${project.canvas.device}:${selectedIds.join("+")}`);
       }
     }
     window.addEventListener("keydown", keyDown);
@@ -980,6 +1070,23 @@ export function StudioShell({ locale }: { locale: Locale }) {
     setSelectedIds([]);
   }
 
+  function beginGuideDrag(event: ReactPointerEvent<HTMLButtonElement>, axis: "x" | "y") {
+    event.preventDefault();
+    event.stopPropagation();
+    const artboard = event.currentTarget.closest(".v5-artboard")?.getBoundingClientRect();
+    if (!artboard) return;
+    const update = (pointer: globalThis.PointerEvent) => {
+      const raw = axis === "x" ? (pointer.clientX - artboard.left) / (zoom / 100) : (pointer.clientY - artboard.top) / (zoom / 100);
+      const maximum = axis === "x" ? project.canvas.width : project.canvas.height;
+      const value = clamp(project.canvas.snap ? Math.round(raw / project.canvas.gridSize) * project.canvas.gridSize : raw, 0, maximum);
+      setGuides((current) => ({ ...current, [axis]: value }));
+    };
+    const stop = () => { window.removeEventListener("pointermove", update); window.removeEventListener("pointerup", stop); window.removeEventListener("pointercancel", stop); };
+    window.addEventListener("pointermove", update);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  }
+
   function finishPenPath() {
     if (penPoints.length < 2) { setPenPoints([]); setActiveTool("select"); return; }
     const minX = Math.min(...penPoints.map((point) => point.x));
@@ -1004,8 +1111,11 @@ export function StudioShell({ locale }: { locale: Locale }) {
     commit({ ...project, canvas: { ...project.canvas, device, width: size.width, height: size.height } });
   }
 
-  function snapValue(value: number) {
-    return project.canvas.snap ? Math.round(value / project.canvas.gridSize) * project.canvas.gridSize : value;
+  function snapValue(value: number, axis?: "x" | "y") {
+    if (!project.canvas.snap) return value;
+    const guide = axis ? guides[axis] : undefined;
+    if (guide !== undefined && Math.abs(value - guide) <= Math.max(4, 8 / (zoom / 100))) return guide;
+    return Math.round(value / project.canvas.gridSize) * project.canvas.gridSize;
   }
 
   function changeNodeFromPreview(nodeId: string, patch: Partial<StudioNode>) {
@@ -1056,7 +1166,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
       onVectorPointChange={(index, point) => { const vectorPoints = node.geometry.vectorPoints.map((item, itemIndex) => itemIndex === index ? { ...item, ...point } : item); applyNodeMutation(node.id, { geometry: { vectorPoints } }, [`geometry.vectorPoints.${index}.x`, `geometry.vectorPoints.${index}.y`]); }}
       onVectorHandleChange={(index, handle, point) => { const vectorPoints = node.geometry.vectorPoints.map((item, itemIndex) => itemIndex === index ? { ...item, [handle]: point, corner: false } : item); applyNodeMutation(node.id, { geometry: { vectorPoints } }); }}
       onClipPointChange={(index, point) => { const clipPoints = node.geometry.clipPoints.map((item, itemIndex) => itemIndex === index ? point : item); applyNodeMutation(node.id, { geometry: { clipPoints } }, [`geometry.clipPoints.${index}.x`, `geometry.clipPoints.${index}.y`]); }}
-      onPivotChange={(point) => applyNodeMutation(node.id, { transform: { pivotX: point.x, pivotY: point.y } }, ["transform.pivotX", "transform.pivotY"])}
+      onPivotChange={(point) => applyTransformBatch(new Map([[node.id, { pivotX: point.x, pivotY: point.y }]]), ["transform.pivotX", "transform.pivotY"], `pivot:${node.id}:${activeVariantId}`)}
       previewMode={previewMode}
       selected={selectedIds.includes(node.id)}
       smartDuration={smartTransition.duration}
@@ -1093,9 +1203,9 @@ export function StudioShell({ locale }: { locale: Locale }) {
       minHeight={Math.max(1, node.layout.minHeight)}
       minWidth={Math.max(1, node.layout.minWidth)}
       onDragStart={(event) => { event.stopPropagation(); selectLayer(node.id, event.metaKey || event.ctrlKey, event.shiftKey); }}
-      onDragStop={(_, data) => applyNodeMutation(node.id, { transform: { x: snapValue(data.x), y: snapValue(data.y) } }, ["transform.x", "transform.y"])}
+      onDragStop={(_, data) => applyTransformBatch(new Map([[node.id, { x: snapValue(data.x, "x"), y: snapValue(data.y, "y") }]]), ["transform.x", "transform.y"], `canvas-move:${node.id}:${activeVariantId}:${project.canvas.device}`)}
       onResizeStart={(event) => { event.stopPropagation(); selectLayer(node.id); }}
-      onResizeStop={(_, __, ref, ___, position) => applyNodeMutation(node.id, { transform: { x: snapValue(position.x), y: snapValue(position.y), width: snapValue(ref.offsetWidth), height: snapValue(ref.offsetHeight) } }, ["transform.x", "transform.y", "transform.width", "transform.height"])}
+      onResizeStop={(_, __, ref, ___, position) => applyTransformBatch(new Map([[node.id, { x: snapValue(position.x, "x"), y: snapValue(position.y, "y"), width: snapValue(ref.offsetWidth), height: snapValue(ref.offsetHeight) }]]), ["transform.x", "transform.y", "transform.width", "transform.height"], `canvas-resize:${node.id}:${activeVariantId}:${project.canvas.device}`)}
       position={{ x: node.transform.x, y: node.transform.y }}
       resizeGrid={project.canvas.snap ? [project.canvas.gridSize, project.canvas.gridSize] : undefined}
       size={{ width: node.transform.width, height: node.transform.height }}
@@ -1116,12 +1226,12 @@ export function StudioShell({ locale }: { locale: Locale }) {
   const roots = getRootNodes(project.nodes);
   const filteredPrimitives = [...primitiveTools, ...uiPrimitives].map((item) => ({ ...item, displayLabel: locale === "es" ? primitiveLabelsEs[item.kind] ?? item.label : item.label })).filter((item) => item.displayLabel.toLowerCase().includes(search.toLowerCase()));
 
-  return <main className={`morphiq-studio-v5 ${previewMode ? "v5-preview-mode" : ""} ${timelineOpen ? "v5-timeline-visible" : ""}`}>
+  return <StudioHelpProvider locale={locale}><main className={`morphiq-studio-v5 ${previewMode ? "v5-preview-mode" : ""} ${timelineOpen ? "v5-timeline-visible" : ""}`}>
     <header className="v5-topbar">
       <div className="v5-topbar-brand"><Link aria-label={t("Back to Morphiq UI", "Volver a Morphiq UI")} href="/"><ArrowLeft size={13} /></Link><div><span>Morphiq UI</span><b>Studio v5</b></div><i className="mh97-signature">MH97</i></div>
-      <div className="v5-document-controls"><input aria-label={t("Project name", "Nombre del proyecto")} onChange={(event) => commit({ ...project, name: event.target.value })} value={project.name} /><span>{project.nodes.length} {t("layers", "capas")}</span></div>
+      <div className="v5-document-controls"><input aria-label={t("Project name", "Nombre del proyecto")} onChange={(event) => commit({ ...project, name: event.target.value }, true, "project:name")} value={project.name} /><span>{project.nodes.length} {t("layers", "capas")}</span><HelpButton label={t("Project and document", "Proyecto y documento")} topic="studio" /></div>
       <div className="v5-history-controls"><button aria-label={t("Undo", "Deshacer")} disabled={!past.length} onClick={undo} type="button"><Undo2 size={13} /></button><button aria-label={t("Redo", "Rehacer")} disabled={!future.length} onClick={redo} type="button"><Redo2 size={13} /></button><button onClick={saveProject} type="button"><Save size={12} /> {t("Save", "Guardar")}</button><button onClick={() => fileInputRef.current?.click()} type="button"><Import size={12} /> {t("Import", "Importar")}</button><input accept="application/json,.json" hidden onChange={(event) => void importProject(event.target.files?.[0])} ref={fileInputRef} type="file" /></div>
-      <div className="v5-mode-controls"><button aria-pressed={previewMode} className={previewMode ? "active" : ""} onClick={() => {
+      <div className="v5-mode-controls"><Helpable label={t("Preview interactions", "Probar interacciones")} topic="export"><button aria-pressed={previewMode} className={previewMode ? "active" : ""} onClick={() => {
         const next = !previewMode;
         const values = Object.fromEntries(project.variables.map((variable) => [variable.id, variable.value]));
         setRuntimeVariables(next ? values : {});
@@ -1129,15 +1239,15 @@ export function StudioShell({ locale }: { locale: Locale }) {
         setRuntimeDirection(next ? project.timeline.direction : null);
         variableSnapshotRef.current = JSON.stringify(next ? values : {});
         setPreviewMode(next);
-      }} type="button"><Play size={12} /> {previewMode ? t("Exit preview", "Salir de vista previa") : t("Preview", "Vista previa")}</button><button onClick={() => setShowExport(true)} type="button"><Code2 size={12} /> {t("Export", "Exportar")}</button></div>
+      }} type="button"><Play size={12} /> {previewMode ? t("Exit preview", "Salir de vista previa") : t("Preview", "Vista previa")}</button></Helpable><Helpable label={t("Export code and project", "Exportar código y proyecto")} topic="export"><button onClick={() => setShowExport(true)} type="button"><Code2 size={12} /> {t("Export", "Exportar")}</button></Helpable><HelpButton className="v5-help-global" label={t("How to use Morphiq Studio", "Cómo usar Morphiq Studio")} topic="studio" /></div>
     </header>
 
     <nav className="v5-toolstrip" aria-label={t("Creation tools", "Herramientas de creación")}>
-      <div>{toolbarTools.map(({ tool, label, icon: Icon }) => { const displayLabel = locale === "es" ? toolLabelsEs[tool] ?? label : label; return <button aria-label={displayLabel} aria-pressed={activeTool === tool} key={tool} onClick={() => { if (activeTool === "pen" && penPoints.length) finishPenPath(); setActiveTool(tool); }} title={displayLabel} type="button"><Icon size={14} /><kbd>{tool === "select" ? "V" : tool === "frame" ? "F" : tool === "rectangle" ? "R" : tool === "ellipse" ? "O" : tool === "pen" ? "P" : tool === "text" ? "T" : ""}</kbd></button>; })}</div>
+      <div>{toolbarTools.map(({ tool, label, icon: Icon }) => { const displayLabel = locale === "es" ? toolLabelsEs[tool] ?? label : label; return <Helpable key={tool} label={displayLabel} topic={tool === "select" ? "tool.select" : tool === "pen" ? "tool.pen" : "tool.shape"}><button aria-label={displayLabel} aria-pressed={activeTool === tool} onClick={() => { if (activeTool === "pen" && penPoints.length) finishPenPath(); setActiveTool(tool); }} title={displayLabel} type="button"><Icon size={14} /><kbd>{tool === "select" ? "V" : tool === "frame" ? "F" : tool === "rectangle" ? "R" : tool === "ellipse" ? "O" : tool === "pen" ? "P" : tool === "text" ? "T" : ""}</kbd></button></Helpable>; })}</div>
       <span />
-      <div className="v5-boolean-tools">{(["union", "subtract", "intersect", "exclude"] as BooleanOperation[]).map((operation) => { const label = locale === "es" ? ({ union: "Unir", subtract: "Restar", intersect: "Intersectar", exclude: "Excluir" } as const)[operation] : operation; return <button aria-label={label} disabled={selectedIds.length < 2} key={operation} onClick={() => groupSelection("boolean", operation)} title={label} type="button"><Shapes size={13} /><small>{operation[0].toUpperCase()}</small></button>; })}<button aria-label={t("Create mask", "Crear máscara")} disabled={selectedIds.length < 2} onClick={maskSelection} title={t("Mask", "Máscara")} type="button"><Eye size={13} /></button></div>
+      <div className="v5-boolean-tools">{(["union", "subtract", "intersect", "exclude"] as BooleanOperation[]).map((operation) => { const label = locale === "es" ? ({ union: "Unir", subtract: "Restar", intersect: "Intersectar", exclude: "Excluir" } as const)[operation] : operation; return <Helpable key={operation} label={label} topic="tool.boolean"><button aria-label={label} disabled={selectedIds.length < 2} onClick={() => groupSelection("boolean", operation)} title={label} type="button"><Shapes size={13} /><small>{operation[0].toUpperCase()}</small></button></Helpable>; })}<Helpable label={t("Create mask", "Crear máscara")} topic="tool.mask"><button aria-label={t("Create mask", "Crear máscara")} disabled={selectedIds.length < 2} onClick={maskSelection} title={t("Mask", "Máscara")} type="button"><Eye size={13} /></button></Helpable></div>
       <span />
-      <div><button aria-label={t("Group", "Agrupar")} disabled={selectedIds.length < 2} onClick={() => groupSelection()} type="button"><Group size={13} /></button><button aria-label={t("Ungroup", "Desagrupar")} disabled={!selectedIds.some((id) => { const node = structuralNodeMap.get(id); return node ? isContainer(node) : false; })} onClick={ungroupSelection} type="button"><Ungroup size={13} /></button><button aria-label={t("Duplicate", "Duplicar")} disabled={!selectedIds.length} onClick={duplicateSelection} type="button"><Copy size={13} /></button><button aria-label={t("Delete", "Eliminar")} disabled={!selectedIds.length} onClick={deleteSelection} type="button"><Trash2 size={13} /></button></div>
+      <div><Helpable label={t("Group selected layers", "Agrupar capas seleccionadas")} topic="panel.layers"><button aria-label={t("Group", "Agrupar")} disabled={selectedIds.length < 2} onClick={() => groupSelection()} type="button"><Group size={13} /></button></Helpable><Helpable label={t("Ungroup selected container", "Desagrupar contenedor seleccionado")} topic="panel.layers"><button aria-label={t("Ungroup", "Desagrupar")} disabled={!selectedIds.some((id) => { const node = structuralNodeMap.get(id); return node ? isContainer(node) : false; })} onClick={ungroupSelection} type="button"><Ungroup size={13} /></button></Helpable><Helpable label={t("Duplicate selection", "Duplicar selección")} topic="panel.layers"><button aria-label={t("Duplicate", "Duplicar")} disabled={!selectedIds.length} onClick={duplicateSelection} type="button"><Copy size={13} /></button></Helpable><Helpable label={t("Delete selection", "Eliminar selección")} topic="panel.layers"><button aria-label={t("Delete", "Eliminar")} disabled={!selectedIds.length} onClick={deleteSelection} type="button"><Trash2 size={13} /></button></Helpable></div>
     </nav>
 
     <section className="v5-editor-grid">
@@ -1145,9 +1255,9 @@ export function StudioShell({ locale }: { locale: Locale }) {
         <div className="v5-panel-tabs" role="tablist">{(["add", "layers", "components"] as LeftTab[]).map((tab) => <button aria-selected={leftTab === tab} key={tab} onClick={() => setLeftTab(tab)} role="tab" type="button">{tab === "add" ? <Plus size={12} /> : tab === "layers" ? <Layers3 size={12} /> : <Component size={12} />}<span>{tab === "add" ? t("Add", "Agregar") : tab === "layers" ? t("Layers", "Capas") : t("Components", "Componentes")}</span></button>)}</div>
         {(leftTab === "add" || leftTab === "layers") && <label className="v5-panel-search"><Search size={11} /><input onChange={(event) => setSearch(event.target.value)} placeholder={leftTab === "layers" ? t("Search layers", "Buscar capas") : t("Search assets", "Buscar recursos")} value={search} /></label>}
         {leftTab === "add" && <div className="v5-left-scroll">
-          <PanelLabel>{t("Primitives", "Primitivas")}</PanelLabel><div className="v5-asset-grid">{filteredPrimitives.map(({ kind, displayLabel, icon: Icon }) => <button key={kind} onClick={() => addNode(kind)} type="button"><Icon size={17} /><span>{displayLabel}</span></button>)}</div>
+          <PanelLabel>{t("Primitives", "Primitivas")}<HelpButton label={t("Add editable primitives", "Agregar primitivas editables")} topic="tool.shape" /></PanelLabel><div className="v5-asset-grid">{filteredPrimitives.map(({ kind, displayLabel, icon: Icon }) => <Helpable key={kind} label={displayLabel} topic={kind === "vector" ? "tool.pen" : "tool.shape"}><button onClick={() => addNode(kind)} type="button"><Icon size={17} /><span>{displayLabel}</span></button></Helpable>)}</div>
           <div className="v5-upload-row"><button onClick={() => imageInputRef.current?.click()} type="button"><Upload size={12} /> {t("Upload image", "Subir imagen")}</button><input accept="image/*" hidden onChange={(event) => addImage(event.target.files?.[0])} ref={imageInputRef} type="file" /></div>
-          <PanelLabel>{t("Editable templates", "Plantillas editables")}</PanelLabel><div className="v5-template-list">{studioTemplates.map((template) => <button key={template.id} onClick={() => loadTemplate(template.id)} type="button"><i className={`v5-template-thumb v5-template-${template.family}`}><Sparkles size={13} /></i><span><b>{locale === "es" ? template.nameEs : template.name}</b><small>{locale === "es" ? template.descriptionEs : template.description}</small></span><ArrowLeft size={11} /></button>)}</div>
+          <PanelLabel>{t("Editable templates", "Plantillas editables")}<HelpButton label={t("Editable component templates", "Plantillas de componentes editables")} topic="studio" /></PanelLabel><div className="v5-template-list">{studioTemplates.map((template) => <button key={template.id} onClick={() => loadTemplate(template.id)} type="button"><i className={`v5-template-thumb v5-template-${template.family}`}><Sparkles size={13} /></i><span><b>{locale === "es" ? template.nameEs : template.name}</b><small>{locale === "es" ? template.descriptionEs : template.description}</small></span><ArrowLeft size={11} /></button>)}</div>
         </div>}
         {leftTab === "layers" && <><StudioLayerTree locale={locale} nodes={project.nodes} onRename={(id, name) => commit({ ...project, nodes: project.nodes.map((node) => node.id === id ? { ...node, name } : node) })} onReparent={reparentNode} onSelect={selectLayer} onToggleExpanded={(id) => commit({ ...project, nodes: project.nodes.map((node) => node.id === id ? { ...node, expanded: !node.expanded } : node) })} onToggleLocked={(id) => commit({ ...project, nodes: project.nodes.map((node) => node.id === id ? { ...node, locked: !node.locked } : node) })} onToggleVisible={(id) => commit({ ...project, nodes: project.nodes.map((node) => node.id === id ? { ...node, visible: !node.visible } : node) })} search={search} selectedIds={selectedIds} /><div className="v5-layer-footer"><button aria-label={t("Move backward", "Enviar atrás")} disabled={!selected} onClick={() => moveLayer(-1)} type="button"><SendToBack size={12} /></button><button aria-label={t("Move forward", "Traer adelante")} disabled={!selected} onClick={() => moveLayer(1)} type="button"><BringToFront size={12} /></button><button disabled={selectedIds.length < 2} onClick={() => groupSelection()} type="button"><Group size={11} /> {t("Group", "Agrupar")}</button></div></>}
         {leftTab === "components" && <div className="v5-left-scroll"><PanelLabel>{t("Local components", "Componentes locales")}</PanelLabel>{project.components.length ? <div className="v5-local-components">{project.components.map((component) => <button key={component.id} onClick={() => instantiateComponent(component.id)} type="button"><Component size={15} /><span><b>{component.name}</b><small>{component.properties.length} {t("props", "props")} · {component.variantIds.length} {t("variants", "variantes")}</small></span><Plus size={11} /></button>)}</div> : <div className="v5-empty-component"><Component size={20} /><p>{t("Select one or more layers and create a reusable component from the right panel.", "Selecciona una o más capas y crea un componente reutilizable desde el panel derecho.")}</p></div>}</div>}
@@ -1155,17 +1265,17 @@ export function StudioShell({ locale }: { locale: Locale }) {
 
       <section className="v5-workspace">
         <div className="v5-canvas-toolbar">
-          <div className="v5-device-switch">{(["desktop", "tablet", "mobile"] as Device[]).map((device) => { const Icon = device === "desktop" ? Monitor : device === "tablet" ? Tablet : Smartphone; const label = locale === "es" ? ({ desktop: "Escritorio", tablet: "Tablet", mobile: "Móvil" } as const)[device] : device; return <button aria-label={label} aria-pressed={project.canvas.device === device} key={device} onClick={() => switchDevice(device)} type="button"><Icon size={12} /></button>; })}<span>{project.canvas.width} × {project.canvas.height}</span></div>
-          <div className="v5-align-tools">{[{ icon: AlignStartHorizontal, value: "left", es: "Alinear izquierda" }, { icon: AlignCenterHorizontal, value: "centerX", es: "Centrar horizontal" }, { icon: AlignEndHorizontal, value: "right", es: "Alinear derecha" }, { icon: AlignStartVertical, value: "top", es: "Alinear arriba" }, { icon: AlignCenterVertical, value: "centerY", es: "Centrar vertical" }, { icon: AlignEndVertical, value: "bottom", es: "Alinear abajo" }].map(({ icon: Icon, value, es }) => <button aria-label={locale === "es" ? es : value} disabled={!selectedIds.length} key={value} onClick={() => alignSelection(value as Parameters<typeof alignSelection>[0])} type="button"><Icon size={12} /></button>)}</div>
-          <div className="v5-canvas-options"><button aria-pressed={project.canvas.showGrid} onClick={() => commit({ ...project, canvas: { ...project.canvas, showGrid: !project.canvas.showGrid } })} type="button">{t("Grid", "Cuadrícula")}</button><button aria-pressed={project.canvas.showRulers} onClick={() => commit({ ...project, canvas: { ...project.canvas, showRulers: !project.canvas.showRulers } })} type="button">{t("Rulers", "Reglas")}</button><button aria-pressed={project.canvas.showGuides} onClick={() => commit({ ...project, canvas: { ...project.canvas, showGuides: !project.canvas.showGuides } })} type="button">{t("Guides", "Guías")}</button><button aria-pressed={project.canvas.snap} onClick={() => commit({ ...project, canvas: { ...project.canvas, snap: !project.canvas.snap } })} type="button">{t("Snap", "Ajustar")}</button></div>
-          <div className="v5-zoom"><button onClick={() => setZoom((value) => Math.max(25, value - 10))} type="button">−</button><span>{zoom}%</span><button onClick={() => setZoom((value) => Math.min(180, value + 10))} type="button">+</button></div>
+          <div className="v5-device-switch">{(["desktop", "tablet", "mobile"] as Device[]).map((device) => { const Icon = device === "desktop" ? Monitor : device === "tablet" ? Tablet : Smartphone; const label = locale === "es" ? ({ desktop: "Escritorio", tablet: "Tablet", mobile: "Móvil" } as const)[device] : device; return <button aria-label={label} aria-pressed={project.canvas.device === device} key={device} onClick={() => switchDevice(device)} type="button"><Icon size={12} /></button>; })}<span>{project.canvas.width} × {project.canvas.height}</span><HelpButton label={t("Responsive canvas", "Lienzo responsivo")} topic="canvas.device" /></div>
+          <div className="v5-align-tools">{[{ icon: AlignStartHorizontal, value: "left", es: "Alinear izquierda" }, { icon: AlignCenterHorizontal, value: "centerX", es: "Centrar horizontal" }, { icon: AlignEndHorizontal, value: "right", es: "Alinear derecha" }, { icon: AlignStartVertical, value: "top", es: "Alinear arriba" }, { icon: AlignCenterVertical, value: "centerY", es: "Centrar vertical" }, { icon: AlignEndVertical, value: "bottom", es: "Alinear abajo" }].map(({ icon: Icon, value, es }) => <button aria-label={locale === "es" ? es : value} disabled={!selectedIds.length} key={value} onClick={() => alignSelection(value as Parameters<typeof alignSelection>[0])} type="button"><Icon size={12} /></button>)}<HelpButton label={t("Align selected layers", "Alinear capas seleccionadas")} topic="canvas.align" /></div>
+          <div className="v5-canvas-options"><button aria-pressed={project.canvas.showGrid} onClick={() => commit({ ...project, canvas: { ...project.canvas, showGrid: !project.canvas.showGrid } })} type="button">{t("Grid", "Cuadrícula")}</button><button aria-pressed={project.canvas.showRulers} onClick={() => commit({ ...project, canvas: { ...project.canvas, showRulers: !project.canvas.showRulers } })} type="button">{t("Rulers", "Reglas")}</button><button aria-pressed={project.canvas.showGuides} onClick={() => commit({ ...project, canvas: { ...project.canvas, showGuides: !project.canvas.showGuides } })} type="button">{t("Guides", "Guías")}</button><button aria-pressed={project.canvas.snap} onClick={() => commit({ ...project, canvas: { ...project.canvas, snap: !project.canvas.snap } })} type="button">{t("Snap", "Ajustar")}</button><HelpButton label={t("Grid, rulers, guides and snap", "Cuadrícula, reglas, guías y ajuste")} topic="canvas.grid" /></div>
+          <div className="v5-zoom"><button onClick={() => setZoom((value) => Math.max(25, value - 10))} type="button">−</button><span>{zoom}%</span><button onClick={() => setZoom((value) => Math.min(180, value + 10))} type="button">+</button><HelpButton label={t("Canvas zoom", "Zoom del lienzo")} /></div>
         </div>
         <div className="v5-canvas-scroller">
           <div className="v5-artboard-wrap" style={{ width: project.canvas.width * zoom / 100, height: project.canvas.height * zoom / 100 }}>
             {project.canvas.showRulers && <><div className="v5-ruler v5-ruler-x">{Array.from({ length: Math.ceil(project.canvas.width / 100) }, (_, index) => <span key={index} style={{ left: index * 100 }}>{index * 100}</span>)}</div><div className="v5-ruler v5-ruler-y">{Array.from({ length: Math.ceil(project.canvas.height / 100) }, (_, index) => <span key={index} style={{ top: index * 100 }}>{index * 100}</span>)}</div></>}
             <div className={`v5-artboard ${project.canvas.showGrid ? "grid" : ""}`} onDoubleClick={() => { if (activeTool === "pen") finishPenPath(); }} onPointerDown={handleCanvasPointer} style={{ width: project.canvas.width, height: project.canvas.height, backgroundColor: project.canvas.color, backgroundSize: `${project.canvas.gridSize}px ${project.canvas.gridSize}px`, transform: `scale(${zoom / 100})` }}>
               {roots.map((node) => renderSceneNode(node))}
-              {project.canvas.showGuides && <><i aria-hidden="true" className="v5-canvas-guide v5-canvas-guide-x" /><i aria-hidden="true" className="v5-canvas-guide v5-canvas-guide-y" /></>}
+              {project.canvas.showGuides && <><button aria-label={t("Drag vertical guide", "Arrastrar guía vertical")} className="v5-canvas-guide v5-canvas-guide-x" onPointerDown={(event) => beginGuideDrag(event, "x")} style={{ left: Math.min(project.canvas.width, guides.x) }} type="button" /><button aria-label={t("Drag horizontal guide", "Arrastrar guía horizontal")} className="v5-canvas-guide v5-canvas-guide-y" onPointerDown={(event) => beginGuideDrag(event, "y")} style={{ top: Math.min(project.canvas.height, guides.y) }} type="button" /></>}
               {penPoints.length > 0 && <svg className="v5-pen-draft" height={project.canvas.height} viewBox={`0 0 ${project.canvas.width} ${project.canvas.height}`} width={project.canvas.width}><polyline fill="none" points={penPoints.map((point) => `${point.x},${point.y}`).join(" ")} stroke="#7359df" strokeWidth="2" />{penPoints.map((point, index) => <circle cx={point.x} cy={point.y} fill="#7359df" key={index} r="4" stroke="white" strokeWidth="2" />)}</svg>}
               {!project.nodes.length && <div className="v5-canvas-empty"><PenTool size={24} /><b>{t("Start from a shape or the Pen tool", "Empieza con una forma o la herramienta Pluma")}</b><span>{t("Every object becomes an editable, animatable layer.", "Cada objeto se convierte en una capa editable y animable.")}</span></div>}
             </div>
@@ -1173,9 +1283,11 @@ export function StudioShell({ locale }: { locale: Locale }) {
         </div>
       </section>
 
-      <aside className="v5-right-panel">
+      <aside className={`v5-right-panel ${inspectorMode === "basic" ? "v5-inspector-simple" : ""}`}>
         <div className="v5-selection-title">{selected ? <><div><b>{selected.name}</b><span>{locale === "es" ? primitiveLabelsEs[selected.kind] ?? selected.kind : selected.kind} · {activeVariantId === "base" ? "Base" : project.variants.find((variant) => variant.id === activeVariantId)?.name}</span></div><button aria-label={selected.locked ? t("Unlock", "Desbloquear") : t("Lock", "Bloquear")} onClick={() => commit({ ...project, nodes: project.nodes.map((node) => node.id === selected.id ? { ...node, locked: !node.locked } : node) })} type="button"><Lock size={11} /></button></> : <span>{t("No selection", "Sin selección")}</span>}</div>
+        {selected && <div className={`v5-edit-context ${activeVariantId !== "base" ? "variant" : project.timeline.tracks.some((track) => track.nodeId === selected.id) ? "motion" : "base"}`}><span>{activeVariantId !== "base" ? t("Editing this state only", "Editando solo este estado") : project.timeline.tracks.some((track) => track.nodeId === selected.id) ? project.timeline.autoKey ? t("Animation edit · Auto-key on", "Edición de animación · Auto-key activo") : t("Animated layer · edit at a keyframe", "Capa animada · edita en un keyframe") : project.canvas.device !== "desktop" ? t(`Base + ${project.canvas.device} responsive view`, `Base + vista responsiva ${project.canvas.device}`) : t("Editing base layer", "Editando capa base")}</span><HelpButton label={t("Current editing context", "Contexto de edición actual")} topic={activeVariantId !== "base" ? "inspector.interactions" : project.timeline.tracks.some((track) => track.nodeId === selected.id) ? "timeline.keyframes" : "inspector.design"} /></div>}
         <div className="v5-inspector-tabs" role="tablist">{(["design", "material", "layout", "component", "interactions", "accessibility"] as InspectorTab[]).map((tab) => { const label = locale === "es" ? ({ design: "Diseño", material: "Material", layout: "Layout", component: "Componente", interactions: "Interacciones", accessibility: "Accesibilidad" } as Record<InspectorTab, string>)[tab] : tab; return <button aria-label={label} aria-selected={inspectorTab === tab} key={tab} onClick={() => setInspectorTab(tab)} role="tab" title={label} type="button">{tab === "design" ? <Maximize2 size={12} /> : tab === "material" ? <WandSparkles size={12} /> : tab === "layout" ? <Frame size={12} /> : tab === "component" ? <Component size={12} /> : tab === "interactions" ? <Play size={12} /> : <Check size={12} />}<span>{label}</span></button>; })}</div>
+        <div className="v5-inspector-mode-switch"><span>{t("Inspector detail", "Detalle del inspector")}</span><div><button aria-pressed={inspectorMode === "basic"} onClick={() => setInspectorMode("basic")} type="button">{t("Essential", "Esencial")}</button><button aria-pressed={inspectorMode === "advanced"} onClick={() => setInspectorMode("advanced")} type="button">{t("Advanced", "Avanzado")}</button></div><HelpButton label={t("Essential and advanced inspector modes", "Modos esencial y avanzado del inspector")} topic="studio" /></div>
         <div className="v5-inspector-scroll">{selected ? <StudioInspector
           activeVariantId={activeVariantId}
           device={project.canvas.device}
@@ -1184,8 +1296,8 @@ export function StudioShell({ locale }: { locale: Locale }) {
           node={selected}
           onAccessibility={updateAccessibility}
           onAddComponentProperty={addComponentProperty}
-          onAddInteraction={(interaction) => commit({ ...project, interactions: [...project.interactions, interaction] })}
-          onAddVariable={(variable) => commit({ ...project, variables: [...project.variables, variable] })}
+          onAddInteraction={addInteraction}
+          onAddVariable={addVariable}
           onBindVariable={bindVariable}
           onComponentDefinition={updateComponentDefinition}
           onCreateComponent={createComponentFromSelection}
@@ -1204,7 +1316,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
           onToggleVectorEdit={() => setVectorEditMode((value) => !value)}
           onTransform={updateTransform}
           onUpsertVariant={addVariant}
-          onVariable={(id, patch) => commit({ ...project, variables: project.variables.map((variable) => variable.id === id ? { ...variable, ...patch } : variable) })}
+          onVariable={(id, patch) => commit({ ...project, variables: project.variables.map((variable) => variable.id === id ? { ...variable, ...patch } : variable) }, true, `variable:${id}:${Object.keys(patch).join("+")}`)}
           tab={inspectorTab}
           vectorEditMode={vectorEditMode}
         /> : <div className="v5-no-selection"><MousePointer2 size={22} /><p>{t("Select a layer to edit its geometry, material, layout and behavior.", "Selecciona una capa para editar su geometría, material, layout y comportamiento.")}</p></div>}</div>
@@ -1212,11 +1324,11 @@ export function StudioShell({ locale }: { locale: Locale }) {
     </section>
 
     <button aria-label={timelineOpen ? t("Hide timeline", "Ocultar línea de tiempo") : t("Show timeline", "Mostrar línea de tiempo")} className="v5-timeline-toggle" onClick={() => setTimelineOpen((value) => !value)} type="button">{timelineOpen ? <PanelBottomClose size={13} /> : <PanelBottomOpen size={13} />}<span>{t("Timeline", "Línea de tiempo")}</span></button>
-    {timelineOpen && <StudioTimelinePanel locale={locale} nodes={resolvedNodes} onPlayhead={(value) => { setActiveVariantId("base"); setPlayhead(value); }} onPlaying={(value) => { if (value) setActiveVariantId("base"); setPlaying(value); }} onSelectKeyframes={setSelectedKeyframeIds} onSelectNode={(id) => setSelectedIds([id])} onTimeline={(timeline) => commit({ ...project, timeline })} playhead={playhead} playing={playing} selectedKeyframeIds={selectedKeyframeIds} selectedNodeIds={selectedIds} timeline={project.timeline} variables={resolvedVariables} />}
+    {timelineOpen && <StudioTimelinePanel locale={locale} nodes={resolvedNodes} onPlayhead={(value) => { setActiveVariantId("base"); setPlayhead(value); }} onPlaying={(value) => { if (value) setActiveVariantId("base"); setPlaying(value); }} onSelectKeyframes={setSelectedKeyframeIds} onSelectNode={(id) => setSelectedIds([id])} onTimeline={(timeline, historyGroup) => commit({ ...project, timeline }, true, historyGroup)} playhead={playhead} playing={playing} selectedKeyframeIds={selectedKeyframeIds} selectedNodeIds={selectedIds} timeline={project.timeline} variables={resolvedVariables} />}
 
     {showExport && <div className="v5-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowExport(false); }}><dialog aria-labelledby="v5-export-title" className="v5-export-dialog" onCancel={() => setShowExport(false)} open><header><div><span>MORPHIQ EXPORT</span><h2 id="v5-export-title">{project.name}</h2></div><button aria-label={t("Close", "Cerrar")} onClick={() => setShowExport(false)} type="button">×</button></header><div aria-label={t("Export format", "Formato de exportación")} className="v5-export-tabs" role="tablist">{(["react", "css", "html", "svg", "ai", "json"] as ExportTab[]).map((tab) => <button aria-selected={exportTab === tab} key={tab} onClick={() => setExportTab(tab)} role="tab" type="button">{tab}</button>)}</div><pre><code>{exportContent}</code></pre><footer><span>{t("Includes hierarchy, materials, responsive rules, variants, motion and reduced-motion fallback.", "Incluye jerarquía, materiales, responsive, variantes, movimiento y alternativa de movimiento reducido.")}</span><div><button onClick={() => void copyExport()} type="button">{copied ? <Check size={12} /> : <Copy size={12} />} {copied ? t("Copied", "Copiado") : t("Copy", "Copiar")}</button><button onClick={() => { const extensions: Record<ExportTab, string> = { react: "tsx", css: "css", html: "html", svg: "svg", ai: "txt", json: "json" }; downloadFile(`${project.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.${extensions[exportTab]}`, exportContent, exportTab === "svg" ? "image/svg+xml" : "text/plain"); }} type="button"><Download size={12} /> {t("Download", "Descargar")}</button><button onClick={() => exportDocument(project)} type="button"><FileJson size={12} /> {t("Project", "Proyecto")}</button></div></footer></dialog></div>}
     {notice && <div className="v5-notice"><Check size={12} />{notice}</div>}
-  </main>;
+  </main></StudioHelpProvider>;
 }
 
 function PanelLabel({ children }: { children: React.ReactNode }) {

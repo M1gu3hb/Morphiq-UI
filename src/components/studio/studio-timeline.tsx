@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type PointerEvent } from "react";
+import { useMemo, useState, type FocusEvent, type KeyboardEvent, type PointerEvent } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -18,6 +18,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { tr, type Locale } from "@/lib/i18n";
+import { HelpButton } from "./studio-help";
 import {
   animatableProperties,
   createId,
@@ -55,11 +56,41 @@ type TimelineProps = {
   onPlaying: (value: boolean) => void;
   onSelectKeyframes: (ids: Set<string>) => void;
   onSelectNode: (id: string) => void;
-  onTimeline: (timeline: StudioTimeline) => void;
+  onTimeline: (timeline: StudioTimeline, historyGroup?: string) => void;
 };
 
 type PropertyOption = (typeof animatableProperties)[number];
 type ClipboardFrame = { nodeId: string; property: AnimatableProperty; offset: number; frame: TimelineKeyframe };
+
+function DraftNumberInput({ ariaLabel, max, min, onCommit, step, value }: { ariaLabel?: string; max?: number; min?: number; onCommit: (value: number) => void; step?: number; value: number }) {
+  const formatted = Number.isInteger(value) ? String(value) : String(Number(value.toFixed(3)));
+  const commit = (event: FocusEvent<HTMLInputElement>) => {
+    const parsed = Number(event.currentTarget.value);
+    if (!Number.isFinite(parsed) || event.currentTarget.value.trim() === "") { event.currentTarget.value = formatted; return; }
+    const next = Math.max(min ?? -Infinity, Math.min(max ?? Infinity, parsed));
+    event.currentTarget.value = String(next);
+    if (next !== value) onCommit(next);
+  };
+  const keyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") event.currentTarget.blur();
+    if (event.key === "Escape") { event.currentTarget.value = formatted; event.currentTarget.blur(); }
+  };
+  return <input aria-label={ariaLabel} defaultValue={formatted} key={formatted} max={max} min={min} onBlur={commit} onKeyDown={keyDown} step={step} type="number" />;
+}
+
+function resizeTimelineDuration(timeline: StudioTimeline, duration: number): StudioTimeline {
+  return {
+    ...timeline,
+    duration,
+    workArea: [Math.min(timeline.workArea[0], duration), Math.min(duration, timeline.workArea[1])],
+    tracks: timeline.tracks.map((track) => {
+      const frames = new Map<number, TimelineKeyframe>();
+      track.keyframes.forEach((frame) => { const time = Math.min(duration, frame.time); frames.set(time, { ...frame, time }); });
+      return { ...track, keyframes: [...frames.values()].sort((a, b) => a.time - b.time) };
+    }),
+    markers: timeline.markers.map((marker) => ({ ...marker, time: Math.min(duration, marker.time) })).sort((a, b) => a.time - b.time),
+  };
+}
 
 function dynamicProperties(node?: StudioNode): PropertyOption[] {
   if (!node) return animatableProperties;
@@ -165,7 +196,7 @@ export function StudioTimelinePanel(props: TimelineProps) {
   }
 
   function updateFrame(id: string, patch: Partial<TimelineKeyframe>) {
-    onTimeline({ ...timeline, tracks: timeline.tracks.map((track) => ({ ...track, keyframes: track.keyframes.map((frame) => frame.id === id ? { ...frame, ...patch, spring: patch.spring ? { ...frame.spring, ...patch.spring } : frame.spring } : frame).sort((a, b) => a.time - b.time) })) });
+    onTimeline({ ...timeline, tracks: timeline.tracks.map((track) => ({ ...track, keyframes: track.keyframes.map((frame) => frame.id === id ? { ...frame, ...patch, spring: patch.spring ? { ...frame.spring, ...patch.spring } : frame.spring } : frame).sort((a, b) => a.time - b.time) })) }, `timeline:keyframe:${id}`);
   }
 
   function selectFrame(event: PointerEvent, id: string) {
@@ -181,7 +212,7 @@ export function StudioTimelinePanel(props: TimelineProps) {
     const ids = selectedKeyframeIds.has(id) ? new Set(selectedKeyframeIds) : new Set([id]);
     const startX = event.clientX;
     const source = structuredClone(timeline);
-    const move = (pointer: globalThis.PointerEvent) => onTimeline(moveKeyframes(source, ids, (pointer.clientX - startX) / trackWidth * timeline.duration));
+    const move = (pointer: globalThis.PointerEvent) => onTimeline(moveKeyframes(source, ids, (pointer.clientX - startX) / trackWidth * timeline.duration), "timeline:move-keyframes");
     const stop = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); window.removeEventListener("pointercancel", stop); };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
@@ -229,30 +260,34 @@ export function StudioTimelinePanel(props: TimelineProps) {
   return <section className="v5-timeline" aria-label={t("Animation timeline", "Línea de tiempo de animación")}>
     <header className="v5-timeline-toolbar">
       <div className="v5-playback-controls">
+        <HelpButton className="v5-help-group" label={t("Timeline playback", "Reproducción del timeline")} topic="timeline.playback" />
         <button aria-label={t("Go to start", "Ir al inicio")} onClick={() => onPlayhead(timeline.workArea[0])} type="button"><Rewind size={12} /></button>
         <button aria-label={t("Previous frame", "Frame anterior")} onClick={() => onPlayhead(Math.max(0, playhead - 1 / timeline.fps))} type="button"><StepBack size={12} /></button>
         <button aria-label={playing ? t("Pause", "Pausar") : t("Play", "Reproducir")} className={playing ? "active" : ""} onClick={() => onPlaying(!playing)} type="button">{playing ? <Pause size={12} /> : <Play size={12} />}</button>
         <button aria-label={t("Next frame", "Frame siguiente")} onClick={() => onPlayhead(Math.min(timeline.duration, playhead + 1 / timeline.fps))} type="button"><StepForward size={12} /></button>
-        <label className="v5-playhead-input"><span>{t("Playhead", "Cabezal")}</span><input aria-label={t("Playhead time in seconds", "Tiempo del cabezal en segundos")} max={timeline.duration} min="0" onChange={(event) => onPlayhead(Math.max(0, Math.min(timeline.duration, Number(event.target.value))))} step={1 / timeline.fps} type="number" value={Number(playhead.toFixed(3))} /><i>s</i></label>
+        <label className="v5-playhead-input"><span>{t("Playhead", "Cabezal")}</span><DraftNumberInput ariaLabel={t("Playhead time in seconds", "Tiempo del cabezal en segundos")} max={timeline.duration} min={0} onCommit={onPlayhead} step={1 / timeline.fps} value={playhead} /><i>s</i></label>
       </div>
       <div className="v5-timeline-create">
+        <HelpButton className="v5-help-group" label={t("Tracks and keyframes", "Pistas y keyframes")} topic="timeline.keyframes" />
         <select aria-label={t("Animation target", "Destino de animación")} onChange={(event) => { setSelectedVariableId(event.target.value); setProperty(event.target.value ? "variable.value" : "transform.x"); }} value={selectedVariableId}><option value="">{selectedNode ? `${t("Layer", "Capa")}: ${selectedNode.name}` : t("Select a layer", "Selecciona una capa")}</option>{variables.map((variable) => <option key={variable.id} value={variable.id}>{t("Variable", "Variable")}: {variable.name}</option>)}</select>
         <select aria-label={t("Animated property", "Propiedad animada")} disabled={Boolean(selectedVariable)} onChange={(event) => setProperty(event.target.value as AnimatableProperty)} value={selectedVariable ? "variable.value" : property}>{Object.entries(propertyGroups).map(([group, options]) => <optgroup key={group} label={group}>{options.map((option) => <option key={option.property} value={option.property}>{option.label}</option>)}</optgroup>)}</select>
         <button disabled={!selectedNode && !selectedVariable} onClick={addTrack} type="button"><Plus size={11} /> {t("Track", "Pista")}</button>
         <button disabled={!selectedNode && !selectedVariable} onClick={addKeyframe} type="button"><Diamond size={10} /> {t("Keyframe", "Keyframe")}</button>
       </div>
       <div className="v5-timeline-edit">
+        <HelpButton className="v5-help-group" label={t("Edit selected keyframes", "Editar keyframes seleccionados")} topic="timeline.keyframes" />
         <button aria-label={t("Copy keyframes", "Copiar keyframes")} disabled={!selectedKeyframeIds.size} onClick={copySelection} type="button"><Copy size={11} /></button>
         <button aria-label={t("Paste keyframes at playhead", "Pegar keyframes en el playhead")} disabled={!clipboard.length} onClick={pasteSelection} type="button"><ClipboardPaste size={11} /></button>
         <button aria-label={t("Duplicate keyframes", "Duplicar keyframes")} disabled={!selectedKeyframeIds.size} onClick={() => { const result = duplicateKeyframes(timeline, selectedKeyframeIds); onTimeline(result.timeline); onSelectKeyframes(result.ids); }} type="button">2×</button>
         <button aria-label={t("Delete keyframes", "Eliminar keyframes")} disabled={!selectedKeyframeIds.size} onClick={() => { onTimeline(removeKeyframes(timeline, selectedKeyframeIds)); onSelectKeyframes(new Set()); }} type="button"><Trash2 size={11} /></button>
         <button aria-label={t("Reverse timeline", "Invertir timeline")} onClick={() => onTimeline(reverseTimeline(timeline))} type="button"><RotateCcw size={11} /></button>
-        <label className="v5-compact-motion-field"><span>{t("Stretch", "Estirar")}</span><input aria-label={t("Stretch factor", "Factor de estiramiento")} max="8" min="0.1" onChange={(event) => setStretchFactor(Math.max(.1, Math.min(8, Number(event.target.value))))} step="0.05" type="number" value={stretchFactor} /></label>
+        <label className="v5-compact-motion-field"><span>{t("Stretch", "Estirar")}</span><DraftNumberInput ariaLabel={t("Stretch factor", "Factor de estiramiento")} max={8} min={.1} onCommit={setStretchFactor} step={.05} value={stretchFactor} /></label>
         <button aria-label={t("Apply time stretch", "Aplicar estiramiento temporal")} disabled={selectedKeyframeIds.size < 2} onClick={() => onTimeline(stretchTimelineSelection(timeline, selectedKeyframeIds, stretchFactor))} type="button">×{stretchFactor}</button>
-        <label className="v5-compact-motion-field"><span>{t("Offset", "Desfase")}</span><input aria-label={t("Stagger offset in seconds", "Desfase escalonado en segundos")} max={timeline.duration} min={-timeline.duration} onChange={(event) => setStaggerAmount(Math.max(-timeline.duration, Math.min(timeline.duration, Number(event.target.value))))} step="0.01" type="number" value={staggerAmount} /></label>
+        <label className="v5-compact-motion-field"><span>{t("Offset", "Desfase")}</span><DraftNumberInput ariaLabel={t("Stagger offset in seconds", "Desfase escalonado en segundos")} max={timeline.duration} min={-timeline.duration} onCommit={setStaggerAmount} step={.01} value={staggerAmount} /></label>
         <button disabled={selectedNodeIds.length < 2} onClick={() => onTimeline(staggerTracks(timeline, selectedNodeIds, staggerAmount))} type="button">{t("Stagger", "Escalonar")}</button>
       </div>
       <div className="v5-timeline-settings">
+        <HelpButton className="v5-help-group" label={t("Timeline settings", "Configuración del timeline")} topic="timeline.playback" />
         <label><span>FPS</span><select onChange={(event) => onTimeline({ ...timeline, fps: Number(event.target.value) as StudioTimeline["fps"] })} value={timeline.fps}><option value="24">24</option><option value="30">30</option><option value="60">60</option></select></label>
         <label><span>{t("Speed", "Velocidad")}</span><select onChange={(event) => onTimeline({ ...timeline, speed: Number(event.target.value) })} value={timeline.speed}><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
         <label><span>{t("Direction", "Dirección")}</span><select onChange={(event) => onTimeline({ ...timeline, direction: event.target.value as StudioTimeline["direction"] })} value={timeline.direction}><option value="normal">→</option><option value="reverse">←</option><option value="alternate">↔</option></select></label>
@@ -279,7 +314,13 @@ export function StudioTimelinePanel(props: TimelineProps) {
     </div>
 
     <footer className="v5-timeline-footer">
-      <div className="v5-work-controls"><label>{t("Duration", "Duración")}<input min="0.1" onChange={(event) => { const duration = Math.max(0.1, Number(event.target.value)); onTimeline({ ...timeline, duration, workArea: [Math.min(timeline.workArea[0], duration), Math.min(duration, timeline.workArea[1])] }); }} step="0.1" type="number" value={timeline.duration} />s</label><label>{t("In", "Entrada")}<input min="0" onChange={(event) => onTimeline({ ...timeline, workArea: [Math.min(Number(event.target.value), timeline.workArea[1]), timeline.workArea[1]] })} step="0.05" type="number" value={timeline.workArea[0]} /></label><label>{t("Out", "Salida")}<input max={timeline.duration} min={timeline.workArea[0]} onChange={(event) => onTimeline({ ...timeline, workArea: [timeline.workArea[0], Number(event.target.value)] })} step="0.05" type="number" value={timeline.workArea[1]} /></label><button onClick={() => onTimeline({ ...timeline, markers: [...timeline.markers, { id: createId("marker"), time: playhead, label: `M${timeline.markers.length + 1}`, color: "#ff8068" }] })} type="button"><Plus size={10} /> {t("Marker", "Marcador")}</button></div>
+      <div className="v5-work-controls">
+        <HelpButton label={t("Work area and markers", "Área de trabajo y marcadores")} topic="timeline.playback" />
+        <label>{t("Duration", "Duración")}<DraftNumberInput min={.1} onCommit={(duration) => onTimeline(resizeTimelineDuration(timeline, duration), "timeline:duration")} step={.1} value={timeline.duration} />s</label>
+        <label>{t("In", "Entrada")}<DraftNumberInput max={timeline.workArea[1]} min={0} onCommit={(value) => onTimeline({ ...timeline, workArea: [value, timeline.workArea[1]] }, "timeline:work-area")} step={.05} value={timeline.workArea[0]} /></label>
+        <label>{t("Out", "Salida")}<DraftNumberInput max={timeline.duration} min={timeline.workArea[0]} onCommit={(value) => onTimeline({ ...timeline, workArea: [timeline.workArea[0], value] }, "timeline:work-area")} step={.05} value={timeline.workArea[1]} /></label>
+        <button onClick={() => onTimeline({ ...timeline, markers: [...timeline.markers, { id: createId("marker"), time: playhead, label: `M${timeline.markers.length + 1}`, color: "#ff8068" }] })} type="button"><Plus size={10} /> {t("Marker", "Marcador")}</button>
+      </div>
       {timeline.markers.length > 0 && <div className="v5-marker-editor">{timeline.markers.map((marker) => <div key={marker.id}><input aria-label={t("Marker label", "Etiqueta del marcador")} onChange={(event) => onTimeline({ ...timeline, markers: timeline.markers.map((item) => item.id === marker.id ? { ...item, label: event.target.value } : item) })} value={marker.label} /><input aria-label={t("Marker color", "Color del marcador")} onChange={(event) => onTimeline({ ...timeline, markers: timeline.markers.map((item) => item.id === marker.id ? { ...item, color: event.target.value } : item) })} type="color" value={marker.color} /><button aria-label={t("Delete marker", "Eliminar marcador")} onClick={() => onTimeline({ ...timeline, markers: timeline.markers.filter((item) => item.id !== marker.id) })} type="button"><Trash2 size={9} /></button></div>)}</div>}
       {activeFrame ? <KeyframeInspector frame={activeFrame.keyframe} locale={locale} onChange={(patch) => updateFrame(activeFrame.keyframe.id, patch)} timeline={timeline} /> : <span className="v5-keyframe-hint">{t("Select a keyframe to edit its value and curve.", "Selecciona un keyframe para editar su valor y curva.")}</span>}
       <label className="v5-timeline-zoom"><Gauge size={11} /><input max="220" min="50" onChange={(event) => setZoom(Number(event.target.value))} type="range" value={zoom} /><span>{zoom}%</span></label>
@@ -297,13 +338,13 @@ function KeyframeInspector({ frame, locale, onChange, timeline }: { frame: Timel
   const numeric = typeof frame.value === "number";
   const boolean = typeof frame.value === "boolean";
   const color = typeof frame.value === "string" && /^#[0-9a-f]{6}$/i.test(frame.value);
-  return <div className="v5-keyframe-inspector">
-    <label><span>{t("Time", "Tiempo")}</span><input max={timeline.duration} min="0" onChange={(event) => onChange({ time: Number(event.target.value) })} step={1 / timeline.fps} type="number" value={Number(frame.time.toFixed(3))} /></label>
-    <label><span>{t("Value", "Valor")}</span>{numeric ? <input onChange={(event) => onChange({ value: Number(event.target.value) })} step="0.1" type="number" value={Number(frame.value)} /> : boolean ? <input checked={Boolean(frame.value)} onChange={(event) => onChange({ value: event.target.checked })} type="checkbox" /> : color ? <input onChange={(event) => onChange({ value: event.target.value })} type="color" value={String(frame.value)} /> : <input onChange={(event) => onChange({ value: event.target.value })} value={String(frame.value)} />}</label>
+  return <div className="v5-keyframe-inspector"><HelpButton label={t("Keyframe value and easing", "Valor y curva del keyframe")} topic="timeline.keyframes" />
+    <label><span>{t("Time", "Tiempo")}</span><DraftNumberInput max={timeline.duration} min={0} onCommit={(time) => onChange({ time })} step={1 / timeline.fps} value={frame.time} /></label>
+    <label><span>{t("Value", "Valor")}</span>{numeric ? <DraftNumberInput onCommit={(value) => onChange({ value })} step={.1} value={Number(frame.value)} /> : boolean ? <input checked={Boolean(frame.value)} onChange={(event) => onChange({ value: event.target.checked })} type="checkbox" /> : color ? <input onChange={(event) => onChange({ value: event.target.value })} type="color" value={String(frame.value)} /> : <input onChange={(event) => onChange({ value: event.target.value })} value={String(frame.value)} />}</label>
     <label><span>{t("Easing", "Curva")}</span><select onChange={(event) => onChange({ easing: event.target.value as EasingType })} value={frame.easing}>{easingOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
     <EasingGraph frame={frame} locale={locale} onChange={onChange} />
     {frame.easing === "cubicBezier" && <div className="v5-bezier-fields">{frame.bezier.map((value, index) => <label key={index}><span>{["X1", "Y1", "X2", "Y2"][index]}</span><input aria-label={`Bezier ${index + 1}`} max="1.5" min="-0.5" onChange={(event) => { const bezier = [...frame.bezier] as TimelineKeyframe["bezier"]; bezier[index] = Number(event.target.value); onChange({ bezier }); }} step="0.01" type="range" value={value} /><output>{value.toFixed(2)}</output></label>)}</div>}
-    {frame.easing === "spring" && <div className="v5-spring-fields">{(["mass", "stiffness", "damping", "velocity"] as const).map((key) => <label key={key}><span>{locale === "es" ? ({ mass: "masa", stiffness: "rigidez", damping: "amort.", velocity: "velocidad" } as const)[key] : key}</span><input min="0" onChange={(event) => onChange({ spring: { ...frame.spring, [key]: Number(event.target.value) } })} step={key === "mass" ? 0.1 : 1} type="number" value={frame.spring[key]} /></label>)}</div>}
+    {frame.easing === "spring" && <div className="v5-spring-fields">{(["mass", "stiffness", "damping", "velocity"] as const).map((key) => <label key={key}><span>{locale === "es" ? ({ mass: "masa", stiffness: "rigidez", damping: "amort.", velocity: "velocidad" } as const)[key] : key}</span><DraftNumberInput min={0} onCommit={(value) => onChange({ spring: { ...frame.spring, [key]: value } })} step={key === "mass" ? .1 : 1} value={frame.spring[key]} /></label>)}</div>}
   </div>;
 }
 

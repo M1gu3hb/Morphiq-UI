@@ -194,6 +194,7 @@ export function reverseTimeline(timeline: StudioTimeline) {
       ...track,
       keyframes: track.keyframes.map((frame) => frame.time >= start && frame.time <= end ? { ...frame, time: start + end - frame.time } : frame).sort((a, b) => a.time - b.time),
     })),
+    markers: timeline.markers.map((marker) => marker.time >= start && marker.time <= end ? { ...marker, time: start + end - marker.time } : marker).sort((a, b) => a.time - b.time),
   };
 }
 

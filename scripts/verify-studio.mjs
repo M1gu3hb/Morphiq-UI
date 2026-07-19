@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -28,6 +28,15 @@ try {
   const templates = require(join(output, "studio-templates.js"));
   const exporter = require(join(output, "studio-export.js"));
   const ts = require(join(root, "node_modules", "typescript"));
+  const helpSource = readFileSync(join(root, "src/components/studio/studio-help.tsx"), "utf8");
+  const inspectorSource = readFileSync(join(root, "src/components/studio/studio-inspector.tsx"), "utf8");
+  const shellSource = readFileSync(join(root, "src/components/studio/studio-shell.tsx"), "utf8");
+
+  for (const topic of ["tool.select", "tool.boolean", "tool.mask", "canvas.device", "canvas.align", "canvas.grid", "panel.layers", "inspector.design", "inspector.material", "inspector.layout", "inspector.component", "inspector.interactions", "inspector.accessibility", "timeline.playback", "timeline.keyframes", "export"]) assert.ok(helpSource.includes(`\"${topic}\"`), `Contextual help topic is missing: ${topic}`);
+  assert.match(helpSource, /Animated example|Ejemplo animado/, "Contextual help must include an animated example section");
+  assert.match(inspectorSource, /defaultValue=\{formatted\}.*onBlur=\{commit\}/s, "Numeric inspector fields must allow draft input before committing");
+  assert.match(shellSource, /Esta propiedad está animada/, "Animated properties must explain why an edit was blocked");
+  assert.match(shellSource, /beginGuideDrag/, "Canvas guides must be directly draggable");
 
   assert.equal(templates.studioTemplates.length, 5, "The five editable v5 templates must remain available");
   const requiredKinds = ["frame", "group", "rectangle", "ellipse", "line", "arrow", "polygon", "star", "text", "image", "icon", "vector", "button", "input", "toggle", "slider", "dial", "progress", "boolean", "componentInstance"];
@@ -110,6 +119,11 @@ try {
   assert.equal(motion.valueAtTime(track, 1), 50, "Numeric timeline interpolation failed");
   const staleTrack = { ...track, id: "stale-track", property: "style.effects.99.blur" };
   assert.doesNotThrow(() => motion.applyTimelineToNodes([node], { ...model.createTimeline(), tracks: [staleTrack] }, 1), "Stale dynamic tracks must not crash the editor");
+  const reversible = { ...model.createTimeline(), duration: 4, workArea: [1, 3], tracks: [{ ...track, keyframes: [motion.createKeyframe(1.25, 0), motion.createKeyframe(2.75, 100)] }], markers: [{ id: "inside-marker", time: 1.5, label: "Inside", color: "#ff8068" }, { id: "outside-marker", time: .5, label: "Outside", color: "#7359df" }] };
+  const reversed = motion.reverseTimeline(reversible);
+  assert.deepEqual(reversed.tracks[0].keyframes.map((frame) => frame.time), [1.25, 2.75], "Reverse must mirror keyframes inside the work area");
+  assert.equal(reversed.markers.find((marker) => marker.id === "inside-marker").time, 2.5, "Reverse must keep timeline markers synchronized with keyframes");
+  assert.equal(reversed.markers.find((marker) => marker.id === "outside-marker").time, .5, "Reverse must not move markers outside the work area");
 
   const cyclic = structuredClone(templates.studioTemplates[0].document);
   cyclic.nodes[0].parentId = cyclic.nodes[1].id;
