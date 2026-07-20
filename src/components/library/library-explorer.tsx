@@ -56,7 +56,8 @@ function componentCss(item: LibraryComponent, accent: string, speed: number) {
 }
 
 function componentCode(item: LibraryComponent, text: string) {
-  return `export function ${item.slug.split("-").map((part) => part[0].toUpperCase() + part.slice(1)).join("")}() {\n  return (\n    <button className="morphiq-${item.slug}" type="button">\n      <span>${text}</span>\n      <span aria-hidden="true">↗</span>\n    </button>\n  );\n}`;
+  const componentName = item.slug.split("-").map((part) => part[0].toUpperCase() + part.slice(1)).join("");
+  return `import type { ButtonHTMLAttributes } from "react";\n\ntype ${componentName}Props = ButtonHTMLAttributes<HTMLButtonElement> & {\n  label?: string;\n};\n\nexport function ${componentName}({\n  label = ${JSON.stringify(text)},\n  className,\n  type = "button",\n  ...props\n}: ${componentName}Props) {\n  return (\n    <button\n      {...props}\n      className={["morphiq-${item.slug}", className].filter(Boolean).join(" ")}\n      type={type}\n    >\n      <span>{label}</span>\n      <span aria-hidden="true">↗</span>\n    </button>\n  );\n}`;
 }
 
 function aiPrompt(item: LibraryComponent, text: string, css: string, code: string, locale: Locale) {
@@ -90,6 +91,7 @@ export function LibraryExplorer({ locale }: { locale: Locale }) {
   const [accent, setAccent] = useState("#ff8068");
   const [speed, setSpeed] = useState(1);
   const [copied, setCopied] = useState<"code" | "ai" | null>(null);
+  const [copyError, setCopyError] = useState("");
   const t = (english: string, spanish: string) => tr(locale, english, spanish);
 
   const visibleItems = useMemo(() => {
@@ -116,12 +118,19 @@ export function LibraryExplorer({ locale }: { locale: Locale }) {
     setAccent(item.accent);
     setSpeed(1);
     setCopied(null);
+    setCopyError("");
   }
 
   async function copy(contents: string, kind: "code" | "ai") {
-    await navigator.clipboard.writeText(contents);
-    setCopied(kind);
-    window.setTimeout(() => setCopied(null), 1500);
+    try {
+      await navigator.clipboard.writeText(contents);
+      setCopyError("");
+      setCopied(kind);
+      window.setTimeout(() => setCopied(null), 1500);
+    } catch {
+      setCopied(null);
+      setCopyError(t("Clipboard unavailable. Download the bundle instead.", "Portapapeles no disponible. Descarga el paquete."));
+    }
   }
 
   const css = selected ? componentCss(selected, accent, speed) : "";
@@ -183,7 +192,7 @@ export function LibraryExplorer({ locale }: { locale: Locale }) {
           <section className="library-customizer" role="dialog" aria-modal="true" aria-labelledby="customizer-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="customizer-head">
               <div><span>Morphiq object / {selected.slug}</span><h2 id="customizer-title">{locale === "es" ? selected.nameEs : selected.name}</h2></div>
-              <button onClick={() => setSelected(null)} aria-label={t("Close", "Cerrar")}><X size={18} /></button>
+              <button onClick={() => setSelected(null)} aria-label={t("Close", "Cerrar")} type="button"><X size={18} /></button>
             </div>
             <div className={`customizer-preview preview-bg-${selected.style}`}>
               <LibraryPreview item={selected} text={customText} accent={accent} speed={speed} />
@@ -205,6 +214,7 @@ export function LibraryExplorer({ locale }: { locale: Locale }) {
               <button onClick={() => downloadFile(`${selected.slug}.css`, css, "text/css")} type="button"><Code2 size={15} /> CSS</button>
               <button onClick={() => downloadFile(`${selected.slug}.svg`, svgAsset(selected, customText, accent), "image/svg+xml")} type="button"><ImageDown size={15} /> SVG</button>
               <button onClick={() => downloadFile(`${selected.slug}-bundle.txt`, `${prompt}\n\n--- SOURCE ---\n${code}\n\n--- STYLES ---\n${css}`, "text/plain")} type="button"><Download size={15} /> {t("Bundle", "Paquete")}</button>
+              <span className="customizer-copy-status" role="status">{copyError}</span>
             </div>
           </section>
         </div>

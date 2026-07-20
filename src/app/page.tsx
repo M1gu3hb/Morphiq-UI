@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -17,7 +18,16 @@ import { useLocale } from "@/lib/client-locale";
 
 export default function Home() {
   const locale = useLocale();
+  const [heroSurface, setHeroSurface] = useState(0);
+  const [heroPreviewing, setHeroPreviewing] = useState(false);
   const t = (english: string, spanish: string) => tr(locale, english, spanish);
+  const heroSurfaces = [
+    { slug: "clay", label: "CLAY / ACTION", name: t("Soft launch", "Lanzamiento suave"), depth: 62 },
+    { slug: "glass", label: "GLASS / SURFACE", name: t("Prism focus", "Enfoque prismático"), depth: 76 },
+    { slug: "skeuo", label: "SKEUO / CONTROL", name: t("Physical dial", "Dial físico"), depth: 48 },
+    { slug: "adaptive", label: "ADAPTIVE / FORM", name: t("Fluid surface", "Superficie fluida"), depth: 88 },
+  ];
+  const activeHeroSurface = heroSurfaces[heroSurface];
 
   return (
     <main className="site-shell overflow-hidden">
@@ -48,7 +58,7 @@ export default function Home() {
             </Link>
           </div>
           <div className="hero-proof" aria-label="Product foundations">
-            <span>{t("Open code", "Código abierto")}</span>
+            <span>{t("Ownable code", "Código propio")}</span>
             <i />
             <span>React + TypeScript</span>
             <i />
@@ -62,27 +72,38 @@ export default function Home() {
           <div className="hero-console glass-panel">
             <div className="console-topline">
               <span className="console-status"><i /> {t("Live surface", "Superficie activa")}</span>
-              <span>01 / 04</span>
+              <span>{String(heroSurface + 1).padStart(2, "0")} / 04</span>
             </div>
-            <div className="console-stage">
-              <div className="clay-sculpture">
+            <div className={`console-stage ${heroPreviewing ? "is-previewing" : ""}`}>
+              <div className={`clay-sculpture hero-material-${activeHeroSurface.slug}`}>
                 <div className="clay-sculpture-gloss" />
                 <Box size={54} strokeWidth={1.25} aria-hidden="true" />
               </div>
               <div className="console-label">
-                <span>CLAY / ACTION</span>
-                <strong>{t("Soft launch", "Lanzamiento suave")}</strong>
+                <span>{activeHeroSurface.label}</span>
+                <strong>{activeHeroSurface.name}</strong>
               </div>
             </div>
             <div className="console-controls">
-              <button className="skeuo-knob" aria-label="Previous surface">
+              <button
+                className="skeuo-knob"
+                aria-label={t("Previous surface", "Superficie anterior")}
+                onClick={() => setHeroSurface((current) => (current + heroSurfaces.length - 1) % heroSurfaces.length)}
+                type="button"
+              >
                 <span>−</span>
               </button>
               <div className="console-meter">
                 <span>{t("Depth", "Profundidad")}</span>
-                <div><i /></div>
+                <div><i style={{ width: `${activeHeroSurface.depth}%` }} /></div>
               </div>
-              <button className="clay-play" aria-label="Preview interaction">
+              <button
+                aria-label={t("Preview interaction", "Previsualizar interacción")}
+                aria-pressed={heroPreviewing}
+                className="clay-play"
+                onClick={() => setHeroPreviewing((previewing) => !previewing)}
+                type="button"
+              >
                 <ArrowRight size={22} aria-hidden="true" />
               </button>
             </div>
@@ -123,6 +144,9 @@ export default function Home() {
                 <span>{style.number}</span>
                 <h3>{style.name}</h3>
                 <p>{locale === "es" ? style.descriptionEs : style.description}</p>
+                <Link className="style-studio-link" href={`/studio?template=${style.slug}-showcase`}>
+                  {t("Open in Studio", "Abrir en Studio")} <ArrowRight size={13} aria-hidden="true" />
+                </Link>
               </div>
               <SurfacePreview variant={style.slug} compact />
             </article>
@@ -142,11 +166,7 @@ export default function Home() {
         </div>
         <div className="component-showcase-grid">
           {componentLibrary.slice(0, 3).map((component) => (
-            <Link
-              className="component-showcase-card"
-              href={`/components#${component.slug}`}
-              key={component.slug}
-            >
+            <article className="component-showcase-card" key={component.slug}>
               <div className={`component-preview component-preview-${component.style}`}>
                 <SurfacePreview variant={component.style} specimen={component.specimen} />
               </div>
@@ -154,10 +174,13 @@ export default function Home() {
                 <div>
                   <span>{component.style}</span>
                   <h3>{locale === "es" ? component.nameEs : component.name}</h3>
+                  <Link className="component-studio-link" href={`/studio?template=${component.style}-showcase`}>
+                    {t("Open in Studio", "Abrir en Studio")}
+                  </Link>
                 </div>
-                <ArrowRight size={19} aria-hidden="true" />
+                <Link aria-label={t("View component", "Ver componente")} href={`/components#${component.slug}`}><ArrowRight size={19} aria-hidden="true" /></Link>
               </div>
-            </Link>
+            </article>
           ))}
         </div>
       </section>
