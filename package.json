@@ -13,7 +13,8 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test:studio": "node scripts/verify-studio.mjs",
-    "check": "npm run lint && npm run typecheck && npm run test:studio && npm run build"
+    "test:registry": "node scripts/verify-registry.mjs",
+    "check": "npm run lint && npm run typecheck && npm run test:studio && npm run test:registry && npm run build"
   },
   "dependencies": {
     "@codesandbox/sandpack-react": "^2.20.0",
