@@ -29,7 +29,7 @@ type StudioNodePreviewProps = {
   transitionType?: TransitionType;
   onSelect: (event: MouseEvent | PointerEvent) => void;
   onChange: (patch: Partial<StudioNode>) => void;
-  onTrigger: (trigger: TriggerType) => void;
+  onTrigger: (trigger: TriggerType) => boolean;
   onVectorPointChange?: (index: number, point: { x: number; y: number }) => void;
   onVectorHandleChange?: (index: number, handle: "handleIn" | "handleOut", point: { x: number; y: number }) => void;
   onClipPointChange?: (index: number, point: { x: number; y: number }) => void;
@@ -225,14 +225,15 @@ export function StudioNodePreview({ children, locale, node, operandNodes, select
   };
 
   function pointerDown(event: PointerEvent<HTMLDivElement>) {
-    event.stopPropagation();
-    if (!previewMode) onSelect(event);
-    else {
-      event.currentTarget.setPointerCapture(event.pointerId);
-      setPressed(true);
-      pointerOrigin.current = { x: event.clientX, y: event.clientY };
-      onTrigger("mouseDown");
+    if (!previewMode) {
+      onSelect(event);
+      return;
     }
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setPressed(true);
+    pointerOrigin.current = { x: event.clientX, y: event.clientY };
+    onTrigger("mouseDown");
   }
 
   function beginPercentDrag(event: PointerEvent<HTMLButtonElement>, onMove: (point: { x: number; y: number }) => void) {
@@ -258,7 +259,14 @@ export function StudioNodePreview({ children, locale, node, operandNodes, select
       aria-label={node.accessibility.decorative ? undefined : node.accessibility.ariaLabel || node.name}
       className={`v5-node v5-node-${node.kind} ${selected && !previewMode ? "v5-node-selected" : ""} ${hovered ? "v5-node-hovered" : ""} ${pressed ? "v5-node-pressed" : ""}`}
       data-node-id={node.id}
-      onClick={(event) => { event.stopPropagation(); if (previewMode) onTrigger("click"); else onSelect(event); }}
+      onClick={(event) => {
+        if (previewMode) {
+          if (onTrigger("click")) event.stopPropagation();
+        } else {
+          event.stopPropagation();
+          onSelect(event);
+        }
+      }}
       onDoubleClick={() => { if (previewMode) onTrigger("doubleClick"); }}
       onBlur={() => { if (previewMode) onTrigger("blur"); }}
       onFocus={() => { if (previewMode) onTrigger("focus"); }}

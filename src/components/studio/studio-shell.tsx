@@ -159,6 +159,18 @@ const toolbarTools: { tool: StudioTool; label: string; icon: typeof Square }[] =
 ];
 
 const toolToKind: Partial<Record<StudioTool, NodeKind>> = { frame: "frame", rectangle: "rectangle", ellipse: "ellipse", line: "line", arrow: "arrow", polygon: "polygon", star: "star", text: "text" };
+const editorResizeHandleStyles = {
+  top: { zIndex: 1000 },
+  right: { zIndex: 1000 },
+  bottom: { zIndex: 1000 },
+  left: { zIndex: 1000 },
+  topRight: { zIndex: 1000 },
+  bottomRight: { zIndex: 1000 },
+  bottomLeft: { zIndex: 1000 },
+  topLeft: { zIndex: 1000 },
+};
+const resizeDirections = ["top", "right", "bottom", "left", "topRight", "bottomRight", "bottomLeft", "topLeft"] as const;
+const editorResizeHandleComponents = Object.fromEntries(resizeDirections.map((direction) => [direction, <span className="v5-resize-hit-target" key={direction} onPointerDown={(event) => event.stopPropagation()} />]));
 const primitiveLabelsEs: Partial<Record<NodeKind, string>> = { frame: "Frame", group: "Grupo", rectangle: "Rectángulo", ellipse: "Elipse", line: "Línea", arrow: "Flecha", polygon: "Polígono", star: "Estrella", text: "Texto", image: "Imagen", icon: "Icono", vector: "Vector", button: "Botón", input: "Campo", toggle: "Interruptor", slider: "Deslizador", dial: "Dial", progress: "Progreso" };
 const toolLabelsEs: Partial<Record<StudioTool, string>> = { select: "Seleccionar", frame: "Frame", rectangle: "Rectángulo", ellipse: "Elipse", line: "Línea", arrow: "Flecha", polygon: "Polígono", star: "Estrella", pen: "Pluma", text: "Texto" };
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
@@ -618,6 +630,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
   function selectLayer(id: string, additive = false, range = false) {
     if (previewMode) return;
     setSelectedIds((current) => {
+      if (!additive && current.length === 1 && current[0] === id) return current;
       if (range && current.length) {
         const from = project.nodes.findIndex((node) => node.id === current.at(-1));
         const to = project.nodes.findIndex((node) => node.id === id);
@@ -986,9 +999,11 @@ export function StudioShell({ locale }: { locale: Locale }) {
   }
 
   function triggerNode(nodeId: string, trigger: TriggerType) {
-    if (!previewMode) return;
+    if (!previewMode) return false;
     const sourceId = structuralNodeMap.get(nodeId)?.instanceSourceId;
-    project.interactions.filter((interaction) => (interaction.sourceNodeId === nodeId || interaction.sourceNodeId === sourceId) && interaction.sourceVariantId === activeVariantId && interaction.trigger === trigger).forEach(runInteraction);
+    const matches = project.interactions.filter((interaction) => (interaction.sourceNodeId === nodeId || interaction.sourceNodeId === sourceId) && interaction.sourceVariantId === activeVariantId && interaction.trigger === trigger);
+    matches.forEach(runInteraction);
+    return matches.length > 0;
   }
 
   useEffect(() => {
@@ -1116,7 +1131,7 @@ export function StudioShell({ locale }: { locale: Locale }) {
   }
 
   function handleCanvasPointer(event: ReactPointerEvent<HTMLDivElement>) {
-    if ((event.target as HTMLElement).closest("[data-node-id]")) return;
+    if ((event.target as HTMLElement).closest("[data-node-id], .v5-rnd-node")) return;
     const point = canvasPoint(event);
     if (activeTool === "pen") {
       setPenPoints((current) => [...current, point]);
@@ -1265,6 +1280,9 @@ export function StudioShell({ locale }: { locale: Locale }) {
       onResizeStop={(_, __, ref, ___, position) => applyTransformBatch(new Map([[node.id, { x: snapValue(position.x, "x"), y: snapValue(position.y, "y"), width: snapValue(ref.offsetWidth), height: snapValue(ref.offsetHeight) }]]), ["transform.x", "transform.y", "transform.width", "transform.height"], `canvas-resize:${node.id}:${activeVariantId}:${project.canvas.device}`)}
       position={{ x: node.transform.x, y: node.transform.y }}
       resizeGrid={project.canvas.snap ? [project.canvas.gridSize, project.canvas.gridSize] : undefined}
+      resizeHandleComponent={editorResizeHandleComponents}
+      resizeHandleStyles={editorResizeHandleStyles}
+      scale={zoom / 100}
       size={{ width: node.transform.width, height: node.transform.height }}
       style={{
         zIndex: project.nodes.indexOf(source) + 1,

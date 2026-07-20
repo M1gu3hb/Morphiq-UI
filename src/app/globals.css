@@ -577,6 +577,7 @@ button { color: inherit; }
 .v5-ruler-x span { top:5px; border-left:1px solid rgba(28,29,26,.25); padding-left:3px; }
 .v5-ruler-y span { left:4px; height:1px; padding-top:2px; border-top:1px solid rgba(28,29,26,.25); writing-mode:vertical-rl; }
 .v5-rnd-node { transform-style:preserve-3d; }
+.v5-resize-hit-target { position:absolute; inset:0; display:block; }
 .v5-relative-node-wrap { flex-shrink:0; transform-style:preserve-3d; }
 .v5-node { outline:0; user-select:none; transform-style:preserve-3d; }
 .v5-node:not(.v5-node-frame):not(.v5-node-group) { align-items:center; justify-content:center; }
@@ -990,6 +991,21 @@ button { color: inherit; }
   .v5-timeline-edit { display:none!important; }
   .v5-timeline-footer { grid-template-columns:auto 1fr; }
   .v5-timeline-zoom { display:none; }
+}
+@media (max-width:700px) {
+  .morphiq-studio-v5 { min-width:0; }
+  .v5-topbar { grid-template-columns:44px minmax(0,1fr) auto; overflow:hidden; }
+  .v5-topbar-brand { justify-content:center; padding:0; }
+  .v5-topbar-brand>div,.v5-topbar-brand .mh97-signature,.v5-document-controls span,.v5-document-controls>.v5-help-button { display:none; }
+  .v5-document-controls { padding:0 5px; }
+  .v5-document-controls input { width:100%; }
+  .v5-mode-controls { padding:0 4px; }
+  .v5-mode-controls button { width:31px; padding:0; overflow:hidden; font-size:0; gap:0; }
+  .v5-mode-controls button svg { flex:none; }
+  .v5-toolstrip { justify-content:flex-start; overflow-x:auto; padding-inline:6px; }
+  .v5-toolstrip>div { flex:none; }
+  .v5-editor-grid { grid-template-columns:180px minmax(380px,1fr) 245px; overflow-x:auto; overscroll-behavior-x:contain; }
+  .v5-timeline { max-width:100vw; overflow-x:auto; }
 }
 @media (prefers-reduced-motion:reduce) {
   .morphiq-studio-v5 * { scroll-behavior:auto!important; animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; }

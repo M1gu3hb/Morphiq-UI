@@ -8,9 +8,10 @@ import { join } from "node:path";
 const require = createRequire(import.meta.url);
 const root = process.cwd();
 const output = mkdtempSync(join(tmpdir(), "morphiq-studio-v5-"));
+const tsc = join(root, "node_modules", "typescript", "bin", "tsc");
 
 try {
-  execFileSync(join(root, "node_modules", ".bin", "tsc"), [
+  execFileSync(process.execPath, [tsc,
     "--target", "es2022",
     "--module", "commonjs",
     "--moduleResolution", "node",
@@ -30,13 +31,22 @@ try {
   const ts = require(join(root, "node_modules", "typescript"));
   const helpSource = readFileSync(join(root, "src/components/studio/studio-help.tsx"), "utf8");
   const inspectorSource = readFileSync(join(root, "src/components/studio/studio-inspector.tsx"), "utf8");
+  const nodeSource = readFileSync(join(root, "src/components/studio/studio-node.tsx"), "utf8");
   const shellSource = readFileSync(join(root, "src/components/studio/studio-shell.tsx"), "utf8");
+  const stylesSource = readFileSync(join(root, "src/app/globals.css"), "utf8");
 
   for (const topic of ["tool.select", "tool.boolean", "tool.mask", "canvas.device", "canvas.align", "canvas.grid", "panel.layers", "inspector.design", "inspector.material", "inspector.layout", "inspector.component", "inspector.interactions", "inspector.accessibility", "timeline.playback", "timeline.keyframes", "export"]) assert.ok(helpSource.includes(`\"${topic}\"`), `Contextual help topic is missing: ${topic}`);
   assert.match(helpSource, /Animated example|Ejemplo animado/, "Contextual help must include an animated example section");
   assert.match(inspectorSource, /defaultValue=\{formatted\}.*onBlur=\{commit\}/s, "Numeric inspector fields must allow draft input before committing");
   assert.match(shellSource, /Esta propiedad está animada/, "Animated properties must explain why an edit was blocked");
   assert.match(shellSource, /beginGuideDrag/, "Canvas guides must be directly draggable");
+  assert.match(nodeSource, /if \(previewMode\) \{\s*if \(onTrigger\("click"\)\) event\.stopPropagation\(\);/, "Unhandled preview clicks must bubble to interactive parent layers");
+  assert.match(nodeSource, /function pointerDown[\s\S]*?if \(!previewMode\) \{\s*onSelect\(event\);\s*return;\s*\}\s*event\.stopPropagation\(\);/, "Edit-mode pointer starts must reach the canvas drag controller");
+  assert.match(shellSource, /<Rnd[\s\S]*?resizeHandleStyles=\{editorResizeHandleStyles\}[\s\S]*?scale=\{zoom \/ 100\}/, "Canvas resize handles must stay reachable and honor the visual zoom scale");
+  assert.match(shellSource, /if \(!additive && current\.length === 1 && current\[0\] === id\) return current;/, "Starting a gesture on the active layer must not recreate its selection state");
+  assert.match(shellSource, /closest\("\[data-node-id\], \.v5-rnd-node"\)/, "Resize handles must be treated as part of their canvas node");
+  assert.match(shellSource, /resizeHandleComponent=\{editorResizeHandleComponents\}/, "Canvas resize handles need a stable pointer target");
+  assert.match(stylesSource, /@media \(max-width:700px\)[\s\S]*\.morphiq-studio-v5 \{[^}]*min-width:0;[^}]*\}[\s\S]*\.v5-editor-grid \{[^}]*overflow-x:auto;/, "Studio must contain its workspace inside narrow mobile viewports");
 
   assert.equal(templates.studioTemplates.length, 5, "The five editable v5 templates must remain available");
   const requiredKinds = ["frame", "group", "rectangle", "ellipse", "line", "arrow", "polygon", "star", "text", "image", "icon", "vector", "button", "input", "toggle", "slider", "dial", "progress", "boolean", "componentInstance"];
@@ -343,7 +353,7 @@ declare module "*.module.css" { const styles: Record<string, string>; export def
     writeFileSync(path, source);
     return path;
   });
-  execFileSync(join(root, "node_modules", ".bin", "tsc"), [
+  execFileSync(process.execPath, [tsc,
     "--noEmit",
     "--target", "es2022",
     "--module", "esnext",
