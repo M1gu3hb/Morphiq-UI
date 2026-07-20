@@ -30,10 +30,24 @@ body {
   font-family: "Manrope Variable", sans-serif;
   font-synthesis: none;
 }
-button, a, input, select { font: inherit; }
-button, a { -webkit-tap-highlight-color: transparent; }
-a { color: inherit; text-decoration: none; }
-button { color: inherit; }
+/*
+ * Element resets live in `@layer base` on purpose.
+ *
+ * Unlayered CSS beats layered CSS in the cascade regardless of specificity, so
+ * while these rules sat outside a layer they silently overrode the Tailwind
+ * utilities that registry components style themselves with: a self-contained
+ * <button> lost its own `color` and `font-size` to `color: inherit` /
+ * `font: inherit`. Keeping them in `base` restores the intended order
+ * (base < components < utilities) so a component's own recipe wins.
+ *
+ * Site chrome classes below stay unlayered and are unaffected.
+ */
+@layer base {
+  button, a, input, select { font: inherit; }
+  button, a { -webkit-tap-highlight-color: transparent; }
+  a { color: inherit; text-decoration: none; }
+  button { color: inherit; }
+}
 ::selection { background: var(--acid); color: var(--ink); }
 
 .site-shell {
