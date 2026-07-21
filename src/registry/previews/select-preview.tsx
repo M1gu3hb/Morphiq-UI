@@ -67,12 +67,19 @@ export function SelectPreview({ material, variant, size, state }: PreviewProps) 
   return (
     <div className="w-[min(320px,100%)]">
       <SelectField
-        // Remounts when the material or the state changes. The control is
-        // uncontrolled, and `defaultValue` is only read at mount — without the
-        // state in the key, switching to `error` would leave the previously
-        // chosen option in place instead of returning to the unfilled
-        // placeholder that is the whole reason the control is invalid.
-        key={`${material}-${state}`}
+        // Remounts when the material changes, and when the control crosses in or
+        // out of the error case. The control is uncontrolled and `defaultValue`
+        // is only read at mount, so without the second half of this key
+        // switching to `error` would leave the previously chosen option in place
+        // instead of returning to the unfilled placeholder that is the whole
+        // reason it is invalid.
+        //
+        // Keyed on the error case rather than on `state` itself so that moving
+        // between `default` and `focus` does NOT remount: a remount would drop
+        // the element and rebuild it already focused, and the depth change and
+        // the chevron's turn — the two things that state exists to show — would
+        // never animate.
+        key={`${material}-${isError ? "error" : "ok"}`}
         data-focus={state === "focus" ? "true" : undefined}
         // The error case leaves the placeholder selected, which is exactly the
         // state a "required" select is invalid in.
