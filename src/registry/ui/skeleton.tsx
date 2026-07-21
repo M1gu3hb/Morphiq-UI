@@ -31,8 +31,9 @@ import { cn } from "@/lib/cn";
  *
  * Local theming knobs:
  *
- *   --mq-base   the placeholder surface
- *   --mq-sheen  the travelling highlight
+ *   --mq-base     the placeholder surface
+ *   --mq-shimmer  the complete travelling highlight recipe
+ *   --mq-edge     the optional glass edge
  */
 
 /**
@@ -67,16 +68,31 @@ function SkeletonKeyframes() {
  * frosted glass actually looks like.
  */
 const MATERIAL_TOKENS = {
-  clay: "[--mq-base:#ddcaba] [--mq-sheen:rgba(255,255,255,0.72)]",
-  glass: [
-    "[--mq-base:rgba(41,37,32,0.16)] [--mq-sheen:rgba(255,255,255,0.55)]",
-    "[--mq-edge:rgba(255,255,255,0.45)]",
+  clay: [
+    "[--mq-base:#ddcaba]",
+    // Broad and warm: pale porcelain light followed by a terracotta undertone.
+    "[--mq-shimmer:linear-gradient(100deg,transparent_28%,rgba(255,246,238,0.20)_39%,rgba(255,255,255,0.78)_50%,rgba(183,110,74,0.16)_61%,transparent_72%)]",
   ].join(" "),
-  skeuo: "[--mq-base:#cfcbc2] [--mq-sheen:rgba(255,255,255,0.70)]",
+  glass: [
+    "[--mq-base:rgba(41,37,32,0.16)]",
+    // A cool narrow frost flare with its own blue edge. The pane carries blur
+    // and saturation so it remains glass over content rather than a grey bar.
+    "[--mq-shimmer:linear-gradient(100deg,transparent_26%,rgba(203,235,244,0.12)_38%,rgba(255,255,255,0.76)_50%,rgba(151,211,226,0.24)_61%,transparent_74%)]",
+    "[--mq-edge:rgba(255,255,255,0.45)]",
+    "backdrop-blur-[12px] backdrop-saturate-[160%]",
+  ].join(" "),
+  skeuo: [
+    "[--mq-base:#cfcbc2]",
+    // Warm greige body, but a sharper achromatic glint than clay: a short dark
+    // seam after the highlight makes the sweep read as machined metal.
+    "[--mq-shimmer:linear-gradient(100deg,transparent_32%,rgba(255,255,255,0.10)_42%,#f4f2ec_49%,#e6e3da_52%,rgba(58,56,51,0.14)_56%,transparent_68%)]",
+  ].join(" "),
   // Polymorphic: no ornament. It adapts — the palette follows the colour scheme.
   adaptive: [
-    "[--mq-base:#d0cec6] [--mq-sheen:rgba(255,255,255,0.80)]",
-    "dark:[--mq-base:#313137] dark:[--mq-sheen:rgba(255,255,255,0.12)]",
+    "[--mq-base:#d0cec6]",
+    "[--mq-shimmer:linear-gradient(100deg,transparent_36%,rgba(255,255,255,0.72)_50%,transparent_64%)]",
+    "dark:[--mq-base:#313137]",
+    "dark:[--mq-shimmer:linear-gradient(100deg,transparent_36%,rgba(255,255,255,0.14)_50%,transparent_64%)]",
   ].join(" "),
 } as const;
 
@@ -91,7 +107,7 @@ const skeletonVariants = cva(
     // and the gradient would otherwise land in the same `tailwind-merge` group
     // and one would silently drop the other.
     "[background-color:var(--mq-base,#ddcaba)]",
-    "[background-image:linear-gradient(100deg,transparent_35%,var(--mq-sheen,rgba(255,255,255,0.72))_50%,transparent_65%)]",
+    "[background-image:var(--mq-shimmer,linear-gradient(100deg,transparent_35%,rgba(255,255,255,0.72)_50%,transparent_65%))]",
     "[background-size:220%_100%] [background-repeat:no-repeat]",
     // Only glass sets an edge; for every other material this resolves to
     // `transparent` and draws nothing.
@@ -103,7 +119,9 @@ const skeletonVariants = cva(
     "motion-reduce:animate-none motion-reduce:[background-image:none]",
     // Forced colours discard the fill entirely, so the placeholder would occupy
     // space while showing nothing. An outline keeps the shape legible.
-    "forced-colors:border forced-colors:border-[GrayText] forced-colors:[background-image:none]",
+    "forced-colors:border forced-colors:border-[GrayText] forced-colors:bg-[Canvas]",
+    "forced-colors:[background-image:none] forced-colors:shadow-none",
+    "forced-colors:backdrop-filter-none",
   ].join(" "),
   {
     variants: {

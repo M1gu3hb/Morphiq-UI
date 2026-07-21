@@ -40,6 +40,9 @@ import { cn } from "@/lib/cn";
  *
  *   --mq-track  the full ring behind the arc
  *   --mq-arc    the moving arc
+ *   --mq-ring-body   the centre of the material ring
+ *   --mq-ring-grad   the material's own light across the ring
+ *   --mq-ring-shadow inset bevel, edge and contact depth
  *   --mq-label  visible label colour
  *   --mq-size   ring diameter
  *   --mq-width  ring thickness
@@ -72,16 +75,41 @@ function SpinnerKeyframes() {
  * screen saying the interface is still alive.
  */
 const MATERIAL_TOKENS = {
-  clay: "[--mq-track:#f0dcd0] [--mq-arc:#9f2f23] [--mq-label:#3a2b22]",
+  clay: [
+    "[--mq-track:#f0dcd0] [--mq-arc:#9f2f23] [--mq-label:#3a2b22]",
+    "[--mq-ring-body:#f6e4d9]",
+    "[--mq-ring-grad:linear-gradient(145deg,rgba(255,255,255,0.82)_0%,rgba(255,255,255,0.20)_48%,rgba(157,85,57,0.14)_100%)]",
+    // Inflated and warm: broad top bloom, terracotta inner shade, a short
+    // earthen edge and a diffuse brown contact shadow. Clay never casts black.
+    "[--mq-ring-shadow:inset_0_2px_2px_rgba(255,255,255,0.72),inset_0_-2px_3px_rgba(142,78,52,0.22),0_2px_0_#d1aa94,0_5px_10px_rgba(92,58,43,0.18)]",
+  ].join(" "),
   // Translucent track, so the arc has to hold up over whatever shows through.
   // A lighter track failed over dark backdrops; 0.62 is where it stops failing.
-  glass:
+  glass: [
     "[--mq-track:rgba(255,255,255,0.62)] [--mq-arc:#0b3f4c] [--mq-label:#24313a]",
-  skeuo: "[--mq-track:#d6d0c4] [--mq-arc:#3f4641] [--mq-label:#29261f]",
+    "[--mq-ring-body:rgba(218,240,246,0.34)]",
+    "[--mq-ring-grad:linear-gradient(145deg,rgba(255,255,255,0.76)_0%,rgba(255,255,255,0.12)_52%,rgba(119,187,204,0.18)_100%)]",
+    // A bright top filo over a cool layered cast shadow. The tint, blur and
+    // saturation belong to the ring itself, so glass reads over any host.
+    "[--mq-ring-shadow:inset_0_1px_0_rgba(255,255,255,0.92),inset_0_-1px_0_rgba(255,255,255,0.26),0_4px_12px_rgba(27,54,66,0.22)]",
+  ].join(" "),
+  skeuo: [
+    "[--mq-track:#d6d0c4] [--mq-arc:#3f4641] [--mq-label:#29261f]",
+    // Warm greige, matching the approved Select/Tabs family rather than the
+    // blue-grey branch the system will remove in a later consolidation.
+    "[--mq-ring-body:#e6e3da]",
+    "[--mq-ring-grad:linear-gradient(145deg,#f7f5ef_0%,#e6e3da_48%,#c9c4b9_100%)]",
+    // Machined rather than soft: hard top bevel, achromatic inner shade, short
+    // side wall and tight contact shadow.
+    "[--mq-ring-shadow:inset_0_1px_0_rgba(255,255,255,0.96),inset_0_-2px_3px_rgba(0,0,0,0.18),0_2px_0_#a8a49b,0_5px_9px_rgba(38,36,31,0.24)]",
+  ].join(" "),
   // Polymorphic: no ornament. It adapts — the palette follows the colour scheme.
   adaptive: [
     "[--mq-track:#d8dad5] [--mq-arc:#171817] [--mq-label:#171817]",
+    "[--mq-ring-body:#f7f7f4] [--mq-ring-grad:none]",
+    "[--mq-ring-shadow:0_1px_2px_rgba(20,20,18,0.16)]",
     "dark:[--mq-track:#42443f] dark:[--mq-arc:#f5f3ee] dark:[--mq-label:#f5f3ee]",
+    "dark:[--mq-ring-body:#26272a] dark:[--mq-ring-shadow:0_1px_2px_rgba(0,0,0,0.52)]",
   ].join(" "),
 } as const;
 
@@ -111,6 +139,12 @@ const ringVariants = cva(
     // no mask, no extra element.
     "border-[length:var(--mq-width,3px)] border-solid",
     "border-[color:var(--mq-track,#f0dcd0)]",
+    // Colour and light are separate declarations so tailwind-merge cannot
+    // collapse one `bg-*` utility into the other. Every var has a literal
+    // fallback, keeping this file copy-and-own.
+    "[background-color:var(--mq-ring-body,#f6e4d9)]",
+    "[background-image:var(--mq-ring-grad,linear-gradient(145deg,rgba(255,255,255,0.82),rgba(157,85,57,0.14)))]",
+    "[box-shadow:var(--mq-ring-shadow,inset_0_2px_2px_rgba(255,255,255,0.72),inset_0_-2px_3px_rgba(142,78,52,0.22),0_2px_0_#d1aa94)]",
     "animate-[mq-spinner-rotate_0.85s_linear_infinite]",
     // Reduced motion stops the rotation outright, leaving a still two-tone
     // ring. The meaning does not depend on the movement: it is carried by the
@@ -127,10 +161,18 @@ const ringVariants = cva(
     "motion-reduce:animate-none",
     // Forced colours discard author border colours; naming system colours keeps
     // both tones, and keeps them distinguishable from each other.
-    "forced-colors:border-[GrayText]",
+    "forced-colors:border-[GrayText] forced-colors:bg-[Canvas]",
+    "forced-colors:[background-image:none] forced-colors:shadow-none",
+    "forced-colors:backdrop-filter-none",
   ].join(" "),
   {
     variants: {
+      material: {
+        clay: "",
+        glass: "backdrop-blur-[10px] backdrop-saturate-[165%]",
+        skeuo: "",
+        adaptive: "",
+      },
       variant: {
         // A quarter arc: three sides track, one side arc.
         arc: [
@@ -144,7 +186,7 @@ const ringVariants = cva(
         ].join(" "),
       },
     },
-    defaultVariants: { variant: "arc" },
+    defaultVariants: { material: "clay", variant: "arc" },
   },
 );
 
@@ -215,7 +257,10 @@ export function Spinner({
         data-material={material}
         role="status"
       >
-        <span aria-hidden="true" className={cn(ringVariants({ variant }), ringClassName)} />
+        <span
+          aria-hidden="true"
+          className={cn(ringVariants({ material, variant }), ringClassName)}
+        />
         {hasVisibleLabel ? (
           <span
             className={cn(

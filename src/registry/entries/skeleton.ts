@@ -17,9 +17,9 @@ export const entry: RegistryEntry = {
   category: "feedback",
   materials: ["clay", "glass", "skeuo", "adaptive"],
   description:
-    "A loading placeholder in four material recipes, three shapes and three sizes. Its shimmer keyframes travel inside the component rather than in a global stylesheet, so copying the file is the whole install, and reduced motion leaves a calm static block instead of a pulse.",
+    "A loading placeholder with four material-specific shimmers, three shapes and three sizes: warm clay, cool frosted glass, a sharp metallic flash over warm greige skeuo, and sober adaptive. Its local keyframes remain copy-and-own, while reduced motion leaves a calm static block.",
   descriptionEs:
-    "Un marcador de carga en cuatro recetas de material, tres formas y tres tamaños. Sus keyframes de brillo viajan dentro del componente en vez de en una hoja de estilos global, así que copiar el archivo es toda la instalación, y con movimiento reducido queda un bloque estático y tranquilo en lugar de un parpadeo.",
+    "Un marcador de carga con cuatro shimmers propios del material, tres formas y tres tamaños: clay cálido, glass escarchado y frío, un destello metálico nítido sobre skeuo greige cálido y adaptive sobrio. Sus keyframes locales siguen siendo copy-and-own, y con movimiento reducido queda un bloque estático y tranquilo.",
   variants: [
     { id: "line", label: "Line", labelEs: "Línea" },
     { id: "circle", label: "Circle", labelEs: "Círculo" },

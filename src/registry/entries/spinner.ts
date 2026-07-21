@@ -17,9 +17,9 @@ export const entry: RegistryEntry = {
   category: "feedback",
   materials: ["clay", "glass", "skeuo", "adaptive"],
   description:
-    "A compact indeterminate loading indicator in four material recipes, two arc treatments and three sizes. Its rotation keyframes travel inside the component, and the wait is announced through real text rather than a label the live region would never read.",
+    "A compact indeterminate loading indicator with four unmistakable material rings, two arc treatments and three sizes. Clay is softly inflated, glass carries its own frost, skeuo uses a warm greige machined bevel and adaptive stays deliberately minimal; the wait is still announced through real text.",
   descriptionEs:
-    "Un indicador de carga indeterminado y compacto en cuatro recetas de material, dos tratamientos de arco y tres tamaños. Sus keyframes de rotación viajan dentro del componente, y la espera se anuncia con texto real en vez de una etiqueta que la región viva nunca leería.",
+    "Un indicador de carga indeterminado y compacto con cuatro anillos materiales inconfundibles, dos tratamientos de arco y tres tamaños. Clay queda inflado y suave, glass lleva su propio frost, skeuo usa un bisel mecánico greige cálido y adaptive se mantiene deliberadamente mínimo; la espera sigue anunciándose con texto real.",
   variants: [
     { id: "arc", label: "Arc", labelEs: "Arco" },
     { id: "ring", label: "Ring", labelEs: "Anillo" },

@@ -28,6 +28,26 @@ type TooltipMaterial = "clay" | "glass" | "skeuo" | "adaptive";
 type TooltipVariant = "default" | "inverted";
 type TooltipSize = "sm" | "md" | "lg";
 
+/**
+ * Motion travels with the component just like its material recipes.
+ *
+ * CSS animations, rather than a transition on a node Radix is about to
+ * unmount, let Radix Presence observe the closing animation and keep Content
+ * mounted until it finishes. The individual `scale` and `translate`
+ * properties compose without taking over a consumer's `transform`.
+ */
+const TOOLTIP_KEYFRAMES =
+  "@keyframes mq-tooltip-enter{from{opacity:0;scale:.94;translate:var(--mq-enter-x,0px) var(--mq-enter-y,0px)}to{opacity:1;scale:1;translate:0 0}}" +
+  "@keyframes mq-tooltip-exit{from{opacity:1;scale:1;translate:0 0}to{opacity:0;scale:.97;translate:var(--mq-enter-x,0px) var(--mq-enter-y,0px)}}";
+
+function TooltipKeyframes() {
+  return (
+    <style href="mq-tooltip-motion" precedence="medium">
+      {TOOLTIP_KEYFRAMES}
+    </style>
+  );
+}
+
 const tooltipContentVariants = cva(
   [
     "z-50 max-w-[min(280px,calc(100vw-24px))] select-none border",
@@ -36,19 +56,22 @@ const tooltipContentVariants = cva(
     "text-[length:var(--mq-font-size,12px)] leading-[1.45] font-bold",
     "text-[color:var(--mq-text,#3a2b22)] border-[var(--mq-brd,rgba(58,43,34,0.24))]",
     "shadow-[var(--mq-shadow,0_8px_20px_rgba(55,38,27,0.18))]",
-    // Entry uses @starting-style and Radix's state/side attributes. Opacity and
-    // the individual translate property are the only values that change, and
-    // both are named in transition-property.
-    "opacity-100 translate-x-0 translate-y-0",
-    "transition-[opacity,translate] duration-150 ease-out",
-    "data-[state=closed]:opacity-0 starting:opacity-0",
+    // Radix owns state and side. Delayed and instant opening share the same
+    // physical move, while instant-open is shorter so moving between adjacent
+    // triggers does not feel sticky. Closing returns toward the trigger.
+    "opacity-100 scale-100 translate-x-0 translate-y-0",
     "data-[side=top]:[--mq-enter-y:4px] data-[side=bottom]:[--mq-enter-y:-4px]",
     "data-[side=left]:[--mq-enter-x:4px] data-[side=right]:[--mq-enter-x:-4px]",
-    "starting:translate-x-[var(--mq-enter-x,0px)] starting:translate-y-[var(--mq-enter-y,0px)]",
-    // The important custom-property overrides beat the more-specific data-side
-    // selectors, guaranteeing no spatial displacement under reduced motion.
-    "motion-reduce:![--mq-enter-x:0px] motion-reduce:![--mq-enter-y:0px] motion-reduce:transition-[opacity]",
-    "forced-colors:border-[CanvasText] forced-colors:bg-[Canvas] forced-colors:text-[CanvasText] forced-colors:shadow-none",
+    "data-[state=delayed-open]:animate-[mq-tooltip-enter_180ms_cubic-bezier(0.16,1,0.3,1)_both]",
+    "data-[state=instant-open]:animate-[mq-tooltip-enter_140ms_cubic-bezier(0.16,1,0.3,1)_both]",
+    "data-[state=closed]:animate-[mq-tooltip-exit_120ms_cubic-bezier(0.4,0,1,1)_both]",
+    // Motion is ornamental; removing the animation leaves the fully open
+    // values above in place and Radix still provides the state change.
+    // Important beats the data-state selector's extra attribute specificity.
+    // Without it the media query was present but the Radix state animation won.
+    "motion-reduce:!animate-none",
+    "forced-colors:border-[CanvasText] forced-colors:bg-[Canvas] forced-colors:text-[CanvasText]",
+    "forced-colors:[background-image:none] forced-colors:shadow-none forced-colors:backdrop-filter-none",
   ].join(" "),
   {
     variants: {
@@ -204,10 +227,15 @@ export function TooltipContent({
     </TooltipPrimitive.Content>
   );
 
-  return portalled ? (
-    <TooltipPrimitive.Portal container={portalContainer}>{content}</TooltipPrimitive.Portal>
-  ) : (
-    content
+  return (
+    <>
+      <TooltipKeyframes />
+      {portalled ? (
+        <TooltipPrimitive.Portal container={portalContainer}>{content}</TooltipPrimitive.Portal>
+      ) : (
+        content
+      )}
+    </>
   );
 }
 
