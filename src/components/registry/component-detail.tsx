@@ -17,7 +17,25 @@ import type { StyleSlug } from "@/lib/component-data";
  * is displayed and copied is always the real file.
  */
 
-const STATES: PreviewState[] = ["default", "focus", "loading", "disabled"];
+/**
+ * Order matters: it is the order the chips appear in. `error` sits last because
+ * it is the most specific — only form controls have one, and a preview whose
+ * component has no invalid state simply renders its default.
+ */
+const STATES: PreviewState[] = ["default", "focus", "loading", "disabled", "error"];
+
+/**
+ * The state chips used to print their raw English key. They are localized now
+ * so the new `error` chip is not the only translated one in a row of English
+ * words — the axis reads the same in both languages or in neither.
+ */
+const STATE_LABELS: Record<PreviewState, { en: string; es: string }> = {
+  default: { en: "Default", es: "Por defecto" },
+  focus: { en: "Focus", es: "Foco" },
+  loading: { en: "Loading", es: "Cargando" },
+  disabled: { en: "Disabled", es: "Deshabilitado" },
+  error: { en: "Error", es: "Error" },
+};
 
 /**
  * Each material is shown over a backdrop that makes it legible on its own
@@ -211,7 +229,7 @@ export function ComponentDetail({ slug, source }: { slug: string; source: string
                     onClick={() => setState(value)}
                     type="button"
                   >
-                    {value}
+                    {locale === "es" ? STATE_LABELS[value].es : STATE_LABELS[value].en}
                   </button>
                 ))}
               </Group>
