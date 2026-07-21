@@ -54,7 +54,13 @@ const buttonVariants = cva(
     // dropped by the later size utility.
     "border font-extrabold tracking-[-0.01em]",
     "cursor-pointer appearance-none",
-    "transition-[transform,box-shadow,background-color,backdrop-filter] duration-200 ease-out",
+    // `translate`, not `transform`: Tailwind v4's `translate-*` utilities write
+    // the standalone `translate` property (`.translate-x-0{translate:var(...)}`),
+    // so listing `transform` here animated nothing and the hover lift and the
+    // active press snapped instead of moving. Nothing in this file sets
+    // `transform` — no rotate, scale, skew or arbitrary transform — so it is
+    // dropped rather than kept alongside.
+    "transition-[translate,box-shadow,background-color,backdrop-filter] duration-200 ease-out",
     "motion-reduce:transition-none",
     FOCUS_RING,
     // Non-interactive states. Driven by `data-state` (not `:disabled`) so the
