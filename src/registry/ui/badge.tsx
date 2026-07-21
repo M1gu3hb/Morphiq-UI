@@ -33,6 +33,21 @@ const FOCUS_RING =
   "data-[focus=true]:outline-[var(--mq-ring,#171817)] " +
   "forced-colors:focus-visible:outline-[Highlight]";
 
+/**
+ * Keyframes travel with the component rather than living in a global stylesheet
+ * a copier would have to find. React 19 hoists this and deduplicates it by
+ * `href`, so a row of badges emits one rule rather than one per pill.
+ */
+const BADGE_KEYFRAMES = `@keyframes mq-badge-in{from{opacity:0;scale:0.82}to{opacity:1;scale:1}}`;
+
+function BadgeKeyframes() {
+  return (
+    <style href="mq-badge-in" precedence="medium">
+      {BADGE_KEYFRAMES}
+    </style>
+  );
+}
+
 const badgeVariants = cva(
   [
     "relative isolate inline-flex w-fit shrink-0 items-center justify-center whitespace-nowrap",
@@ -42,6 +57,19 @@ const badgeVariants = cva(
     // Documentation can force these non-interactive states. There is no
     // transition on purpose: status metadata should update immediately.
     "data-[state=loading]:opacity-75 data-[state=disabled]:opacity-55",
+    // Signature: a badge pops in rather than blinking into place. Keyframes and
+    // not a transition, because a badge is rendered in its final state and a
+    // transition has nothing to run from on the frame an element mounts.
+    "animate-[mq-badge-in_260ms_cubic-bezier(0.34,1.56,0.64,1)]",
+    // Decoration only — the label is the meaning and it is present either way —
+    // so reduced motion drops the pop entirely rather than keeping an end state.
+    "motion-reduce:animate-none",
+    // A badge is metadata, not a control, so the hover cue stays a whisper: the
+    // surface brightens very slightly and nothing moves. `filter` is the
+    // property Tailwind v4 writes `brightness-*` to, so it is what the
+    // transition names.
+    "transition-[filter] duration-200 ease-out hover:brightness-[1.04]",
+    "motion-reduce:transition-none motion-reduce:hover:brightness-100",
     FOCUS_RING,
     "forced-colors:border-[CanvasText] forced-colors:bg-[Canvas] forced-colors:text-[CanvasText] forced-colors:shadow-none",
   ].join(" "),
@@ -239,21 +267,24 @@ export function Badge({
   const Comp = asChild ? Slot : "span";
 
   return (
-    <Comp
-      {...props}
-      className={cn(badgeVariants({ material, tone, size }), className)}
-      data-material={material ?? "clay"}
-      data-tone={tone ?? "neutral"}
-    >
-      {dot ? (
-        <span
-          aria-hidden="true"
-          className="size-[0.55em] shrink-0 rounded-full bg-current"
-          data-badge-dot=""
-        />
-      ) : null}
-      <Slottable>{children}</Slottable>
-    </Comp>
+    <>
+      <BadgeKeyframes />
+      <Comp
+          {...props}
+        className={cn(badgeVariants({ material, tone, size }), className)}
+        data-material={material ?? "clay"}
+        data-tone={tone ?? "neutral"}
+      >
+        {dot ? (
+          <span
+            aria-hidden="true"
+            className="size-[0.55em] shrink-0 rounded-full bg-current"
+            data-badge-dot=""
+          />
+        ) : null}
+        <Slottable>{children}</Slottable>
+      </Comp>
+    </>
   );
 }
 

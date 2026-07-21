@@ -66,6 +66,25 @@ const FOCUS_RING =
   "data-[focus=true]:outline-[var(--mq-ring,#171817)] " +
   "forced-colors:focus-visible:outline-[Highlight]";
 
+/**
+ * Keyframes travel with the component rather than living in a global stylesheet
+ * a copier would have to find. React 19 hoists this and deduplicates it by
+ * `href`, so a stack of alerts emits one rule rather than one per callout.
+ *
+ * `translate` is the standalone property Tailwind v4 writes its utilities to,
+ * and it is what this animates — there is no `transform` anywhere in the file
+ * for it to fight with.
+ */
+const ALERT_KEYFRAMES = `@keyframes mq-alert-in{from{opacity:0;translate:-8px 0}to{opacity:1;translate:0 0}}@keyframes mq-alert-icon{0%{scale:0.86}55%{scale:1.06}100%{scale:1}}`;
+
+function AlertKeyframes() {
+  return (
+    <style href="mq-alert-in" precedence="medium">
+      {ALERT_KEYFRAMES}
+    </style>
+  );
+}
+
 const alertVariants = cva(
   [
     "relative isolate grid w-full max-w-[min(620px,100%)] grid-cols-[minmax(0,1fr)] items-start overflow-hidden border",
@@ -73,9 +92,21 @@ const alertVariants = cva(
     "gap-[var(--mq-gap,12px)] rounded-[var(--mq-radius,20px)] p-[var(--mq-pad,16px)]",
     "border-[var(--mq-brd,rgba(82,70,56,0.18))] text-[color:var(--mq-text,#332f2a)]",
     "before:pointer-events-none before:absolute before:inset-y-[var(--mq-accent-inset,12px)] before:left-[6px] before:w-[4px] before:rounded-full before:bg-[var(--mq-accent,#332f2a)]",
-    // A callout is not an interactive surface, so state changes are immediate.
-    // No transition means reduced-motion users receive exactly the same UI.
+    // A callout is not an interactive surface, so its *state* changes stay
+    // immediate — a reduced-motion user gets exactly the same UI there.
     "data-[state=disabled]:opacity-55 data-[state=loading]:cursor-progress",
+    // Signature: an alert arrives rather than appearing. It fades and slides a
+    // few pixels off the accent rule on its inline-start edge, so the movement
+    // reads as coming from the marker that identifies its tone.
+    //
+    // Keyframes rather than a transition, because an alert is mounted in its
+    // final state and a transition has nothing to run from on the frame an
+    // element appears.
+    "animate-[mq-alert-in_320ms_cubic-bezier(0.22,1.25,0.36,1)]",
+    // The entrance is decoration: the callout is already announced by its role
+    // and, for the assertive tones, by its live region. Reduced motion drops
+    // the travel and the alert is simply present — never delayed, never hidden.
+    "motion-reduce:animate-none",
     FOCUS_RING,
     "forced-colors:border-[CanvasText] forced-colors:bg-[Canvas] forced-colors:text-[CanvasText] forced-colors:shadow-none forced-colors:before:bg-[CanvasText]",
   ].join(" "),
@@ -317,56 +348,64 @@ export function Alert({
         : undefined;
 
   return (
-    <div
-      {...props}
-      aria-atomic={liveRole ? true : undefined}
-      aria-live={liveRole ? resolvedUrgency : undefined}
-      className={cn(alertVariants({ material, tone: resolvedTone, size }), className)}
-      data-has-icon={resolvedIcon ? "true" : undefined}
-      data-material={material ?? "clay"}
-      data-tone={resolvedTone}
-      data-urgency={resolvedUrgency}
-      role={liveRole}
-    >
-      {resolvedIcon ? (
-        <span
-          aria-hidden="true"
-          className={cn(
-            "relative z-10 grid place-items-center",
-            "size-[var(--mq-icon-box,36px)] rounded-[var(--mq-icon-radius,12px)]",
-            "bg-[var(--mq-icon-bg,rgba(255,255,255,0.50))] text-[color:var(--mq-accent,#332f2a)]",
-            "shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]",
-            "[&>svg]:size-[var(--mq-glyph,19px)]",
-            "forced-colors:border forced-colors:border-[CanvasText] forced-colors:bg-[Canvas] forced-colors:text-[CanvasText] forced-colors:shadow-none",
-          )}
-          data-alert-icon=""
-        >
-          {resolvedIcon}
-        </span>
-      ) : null}
-      <div className="relative z-10 min-w-0" data-alert-content="">
-        <div
-          className="text-[length:var(--mq-title-size,14px)] leading-[1.25] font-extrabold tracking-[-0.01em]"
-          data-alert-title=""
-        >
-          <span className="sr-only" data-alert-tone-label="">
-            {toneLabel ?? TONE_LABEL[resolvedTone]}:{" "}
+    <>
+      <AlertKeyframes />
+      <div
+          {...props}
+          aria-atomic={liveRole ? true : undefined}
+        aria-live={liveRole ? resolvedUrgency : undefined}
+        className={cn(alertVariants({ material, tone: resolvedTone, size }), className)}
+        data-has-icon={resolvedIcon ? "true" : undefined}
+        data-material={material ?? "clay"}
+        data-tone={resolvedTone}
+        data-urgency={resolvedUrgency}
+        role={liveRole}
+      >
+        {resolvedIcon ? (
+          <span
+            aria-hidden="true"
+            className={cn(
+              "relative z-10 grid place-items-center",
+              "size-[var(--mq-icon-box,36px)] rounded-[var(--mq-icon-radius,12px)]",
+              "bg-[var(--mq-icon-bg,rgba(255,255,255,0.50))] text-[color:var(--mq-accent,#332f2a)]",
+              "shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]",
+              "[&>svg]:size-[var(--mq-glyph,19px)]",
+              // A micro-pulse a beat behind the callout itself, so the eye lands
+              // on the tone marker last. Decoration on a glyph that is already
+              // aria-hidden, so reduced motion simply drops it.
+              "animate-[mq-alert-icon_360ms_cubic-bezier(0.34,1.56,0.64,1)_80ms_both]",
+              "motion-reduce:animate-none",
+              "forced-colors:border forced-colors:border-[CanvasText] forced-colors:bg-[Canvas] forced-colors:text-[CanvasText] forced-colors:shadow-none",
+            )}
+            data-alert-icon=""
+          >
+            {resolvedIcon}
           </span>
-          {title}
-        </div>
-        <div
-          className="mt-[4px] text-[length:var(--mq-desc-size,12px)] leading-[1.55] font-medium [&>p]:m-0"
-          data-alert-description=""
-        >
-          {children}
-        </div>
-        {action ? (
-          <div className="mt-[10px] flex flex-wrap items-center gap-[8px]" data-alert-action="">
-            {action}
-          </div>
         ) : null}
+      <div className="relative z-10 min-w-0" data-alert-content="">
+          <div
+            className="text-[length:var(--mq-title-size,14px)] leading-[1.25] font-extrabold tracking-[-0.01em]"
+            data-alert-title=""
+          >
+            <span className="sr-only" data-alert-tone-label="">
+              {toneLabel ?? TONE_LABEL[resolvedTone]}:{" "}
+            </span>
+            {title}
+          </div>
+          <div
+            className="mt-[4px] text-[length:var(--mq-desc-size,12px)] leading-[1.55] font-medium [&>p]:m-0"
+            data-alert-description=""
+          >
+            {children}
+          </div>
+          {action ? (
+            <div className="mt-[10px] flex flex-wrap items-center gap-[8px]" data-alert-action="">
+              {action}
+            </div>
+          ) : null}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
