@@ -30,26 +30,30 @@ function asSize(value: string): CheckboxSize {
 }
 
 /** Copy differs per material so each recipe is shown doing real work. */
-const COPY: Record<StyleSlug, { label: string; helper: string; mixed: string }> = {
+const COPY: Record<StyleSlug, { label: string; helper: string; mixed: string; off: string }> = {
   clay: {
     label: "Auto-promote builds",
     helper: "Promotes once a build holds for thirty minutes.",
     mixed: "Some environments enabled",
+    off: "Require a manual approval",
   },
   glass: {
     label: "Hold notifications",
     helper: "Stays on until the focus block ends.",
     mixed: "Some channels muted",
+    off: "Allow calls to break through",
   },
   skeuo: {
     label: "Phantom power",
     helper: "Required by condenser microphones.",
     mixed: "Some channels powered",
+    off: "Pad the input by 20 dB",
   },
   adaptive: {
     label: "Email invoices",
     helper: "Sent to the billing address each month.",
     mixed: "Some members subscribed",
+    off: "Include usage breakdown",
   },
 };
 
@@ -73,6 +77,20 @@ export function CheckboxPreview({ material, variant, size, state }: PreviewProps
         size={resolvedSize}
         variant={resolvedVariant}
       />
+      {/* An unchecked specimen, shown alongside rather than replacing the main
+          one. The redesign put most of each material's character into the EMPTY
+          box — clay's inflated pad, skeuo's recessed groove, glass's frost — and
+          a gallery that only ever showed a filled box would hide exactly the
+          part worth reviewing. */}
+      <label className="inline-flex cursor-pointer items-center gap-[10px]">
+        <Checkbox
+          disabled={isDisabled}
+          material={material}
+          size={resolvedSize}
+          variant={resolvedVariant}
+        />
+        <span className="text-[length:12px] leading-[1.4] font-bold opacity-80">{copy.off}</span>
+      </label>
       {/* The mixed state has no equivalent in `PreviewState`, so it is shown
           alongside rather than replacing the main specimen. */}
       <label className="inline-flex cursor-pointer items-center gap-[10px]">
