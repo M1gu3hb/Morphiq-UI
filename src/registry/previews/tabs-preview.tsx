@@ -66,6 +66,14 @@ export function TabsPreview({ material, variant, size, state }: PreviewProps) {
     <Tabs
       className="w-[min(360px,100%)]"
       defaultValue={panels[0].value}
+      // Remounts when the material changes, and only then. Each material names
+      // its own panels, so without this the root keeps the value it was mounted
+      // with, that value matches none of the new triggers, and the component
+      // renders with *no active tab at all* — no chip, no indicator, and a
+      // tablist nothing in it is tabbable. Keyed on `material` alone and not on
+      // `state`: a remount on every state switch would rebuild the element
+      // already in its new state and the indicator would never be seen sliding.
+      key={material}
       material={material}
       size={asSize(size)}
       variant={asVariant(variant)}
