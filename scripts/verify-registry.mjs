@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { readEntrySlugs, renderRegistryModule } from "./gen-registry.mjs";
 
 const require = createRequire(import.meta.url);
 const root = process.cwd();
@@ -20,6 +21,8 @@ const tsc = join(root, "node_modules", "typescript", "bin", "tsc");
 const ts = require(join(root, "node_modules", "typescript"));
 const schemaPath = join(root, "src", "registry", "schema.ts");
 const registryPath = join(root, "src", "registry", "index.ts");
+const entriesDir = join(root, "src", "registry", "entries");
+const generatedPath = join(root, "src", "registry", "generated.ts");
 const globalsPath = join(root, "src", "app", "globals.css");
 const validMaterials = new Set(["clay", "glass", "skeuo", "adaptive"]);
 const implicitPeerPackages = new Set(["react", "react-dom"]);
@@ -164,22 +167,53 @@ function registryContract(schemaSourceFile) {
   return { categories, fields };
 }
 
-function readRegistryEntries(sourceFile) {
-  let initializer;
+/** Finds `export const <name> = …` and returns its initializer. */
+function exportedInitializer(sourceFile, name) {
   for (const statement of sourceFile.statements) {
     if (!ts.isVariableStatement(statement)) continue;
+    const exported = statement.modifiers?.some(
+      (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
+    );
+    if (!exported) continue;
     for (const declaration of statement.declarationList.declarations) {
-      if (ts.isIdentifier(declaration.name) && declaration.name.text === "registry") {
-        initializer = declaration.initializer;
+      if (ts.isIdentifier(declaration.name) && declaration.name.text === name) {
+        return declaration.initializer;
       }
     }
   }
-  assert.ok(initializer, "src/registry/index.ts must export a registry variable");
-  const array = unwrapExpression(initializer);
-  assert.ok(ts.isArrayLiteralExpression(array), "registry must be an array literal");
-  return array.elements.map((element) => {
-    const value = staticValue(element);
-    assert.ok(value && !Array.isArray(value), "Every registry entry must be an object literal");
+  return undefined;
+}
+
+/**
+ * Reads every registry entry from `src/registry/entries/<slug>.ts`.
+ *
+ * The entries directory is the source of truth, not the generated index: the
+ * suite must validate what an author actually wrote, so that a stale or
+ * hand-edited `generated.ts` can never make a broken entry look fine. The
+ * generated file is checked separately, for freshness only.
+ */
+function readRegistryEntries() {
+  const slugs = readEntrySlugs();
+  return slugs.map((slug) => {
+    const path = join(entriesDir, `${slug}.ts`);
+    const { sourceFile } = readSource(path, ts.ScriptKind.TS);
+    const initializer = exportedInitializer(sourceFile, "entry");
+    assert.ok(
+      initializer,
+      `src/registry/entries/${slug}.ts must export a const named \`entry\``,
+    );
+    const value = staticValue(unwrapExpression(initializer));
+    assert.ok(
+      value && !Array.isArray(value) && typeof value === "object",
+      `src/registry/entries/${slug}.ts: \`entry\` must be an object literal`,
+    );
+    // The file name is the slug, so the assembled order needs no manual upkeep
+    // and two components can never silently claim the same route.
+    assert.equal(
+      value.slug,
+      slug,
+      `src/registry/entries/${slug}.ts declares slug "${value.slug}"; the file name must match the slug`,
+    );
     return value;
   });
 }
@@ -568,8 +602,36 @@ function registryFiles(directory) {
 
 try {
   const { sourceFile: schemaSourceFile } = readSource(schemaPath, ts.ScriptKind.TS);
-  const { sourceFile: registrySourceFile } = readSource(registryPath, ts.ScriptKind.TS);
   const globalsSource = readFileSync(globalsPath, "utf8");
+
+  // The public entry point must keep re-exporting the assembled array, or the
+  // catalog and `/components/[slug]` would quietly read something else.
+  const registrySource = readFileSync(registryPath, "utf8");
+  assert.match(
+    registrySource,
+    /export\s*\{\s*registry\s*\}\s*from\s*"@\/registry\/generated"/,
+    "src/registry/index.ts must re-export `registry` from @/registry/generated",
+  );
+
+  // `generated.ts` is produced by the `pre*` hooks, so a mismatch means codegen
+  // did not run or the file was hand edited. Comparing against a fresh render
+  // catches both without trusting the artifact for anything else.
+  const expectedGenerated = renderRegistryModule(readEntrySlugs());
+  let actualGenerated;
+  try {
+    actualGenerated = readFileSync(generatedPath, "utf8");
+  } catch {
+    actualGenerated = null;
+  }
+  assert.ok(
+    actualGenerated !== null,
+    "src/registry/generated.ts is missing — run `npm run registry:gen`",
+  );
+  assert.equal(
+    actualGenerated,
+    expectedGenerated,
+    "src/registry/generated.ts is out of date with src/registry/entries — run `npm run registry:gen`",
+  );
   const declaredSiteVariables = new Set(
     [...globalsSource.matchAll(/(^|[\s;{])(--[a-zA-Z0-9_-]+)\s*:/gm)].map((match) => match[2]),
   );
@@ -579,7 +641,7 @@ try {
   const forbiddenVariables = new Set(forbiddenSiteVariables);
   const chromeClasses = globalClassNames(globalsSource);
   const { categories, fields } = registryContract(schemaSourceFile);
-  const entries = readRegistryEntries(registrySourceFile);
+  const entries = readRegistryEntries();
   assert.ok(entries.length > 0, "registry must contain at least one component");
 
   const slugs = entries.map((entry, index) => {
