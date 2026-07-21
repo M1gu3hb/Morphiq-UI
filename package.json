@@ -14,6 +14,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test:studio": "node scripts/verify-studio.mjs",
     "test:registry": "node scripts/verify-registry.mjs",
+    "test:e2e": "playwright test",
     "check": "npm run lint && npm run typecheck && npm run test:studio && npm run test:registry && npm run build"
   },
   "dependencies": {
@@ -36,6 +37,7 @@
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
