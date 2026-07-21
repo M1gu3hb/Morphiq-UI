@@ -74,7 +74,7 @@ const cardVariants = cva(
     // lift snapped instead of moving. Nothing in this file sets `transform` —
     // no rotate, scale, skew or arbitrary transform — so it is dropped rather
     // than kept alongside.
-    "transition-[translate,box-shadow,background-color,backdrop-filter] duration-200 ease-out",
+    "transition-[translate,box-shadow,background-color,backdrop-filter,opacity] duration-200 ease-out",
     "motion-reduce:transition-none",
     // Shadows and translucency are erased in forced-colors mode, so the card
     // would dissolve into the page. A system-colored border keeps its bounds.

@@ -60,7 +60,7 @@ const buttonVariants = cva(
     // active press snapped instead of moving. Nothing in this file sets
     // `transform` — no rotate, scale, skew or arbitrary transform — so it is
     // dropped rather than kept alongside.
-    "transition-[translate,box-shadow,background-color,backdrop-filter] duration-200 ease-out",
+    "transition-[translate,box-shadow,background-color,backdrop-filter,filter,opacity] duration-200 ease-out",
     "motion-reduce:transition-none",
     FOCUS_RING,
     // Non-interactive states. Driven by `data-state` (not `:disabled`) so the
