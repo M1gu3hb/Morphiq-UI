@@ -19,8 +19,14 @@ import { cn } from "@/lib/cn";
  *   --mq-track-off  track fill when unchecked
  *   --mq-track-on   track fill when checked
  *   --mq-track-brd  track border color
+ *   --mq-track-image  track lighting / material grain
+ *   --mq-track-shadow track inset depth and outer lift
+ *   --mq-track-blur / --mq-track-saturate glass backdrop treatment
  *   --mq-thumb-bg   thumb fill
  *   --mq-thumb-brd  thumb border color
+ *   --mq-thumb-image  thumb highlight / material lighting
+ *   --mq-thumb-shadow thumb resting depth
+ *   --mq-thumb-shadow-hover thumb hover depth
  *   --mq-on-text    caption color over the checked track
  *   --mq-off-text   caption color over the unchecked track
  *   --mq-icon       glyph color inside the thumb (`icon` variant)
@@ -66,18 +72,34 @@ const toggleVariants = cva(
           "[--mq-track-off:#e7d9cc] [--mq-track-on:#ff9077]",
           "[--mq-track-brd:rgba(120,60,40,0.20)]",
           "[--mq-thumb-bg:#fffaf6] [--mq-thumb-brd:rgba(120,60,40,0.22)]",
+          "[--mq-track-image:linear-gradient(180deg,rgba(255,255,255,0.50)_0%,rgba(255,255,255,0.12)_46%,rgba(112,48,31,0.10)_100%)]",
+          "[--mq-track-shadow:inset_0_3px_4px_rgba(255,255,255,0.46),inset_0_-4px_6px_rgba(112,48,31,0.18),0_4px_10px_rgba(75,40,31,0.14)]",
+          "[--mq-thumb-image:linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(255,250,246,0.62)_48%,rgba(190,116,92,0.16)_100%)]",
+          "[--mq-thumb-shadow:inset_0_2px_2px_rgba(255,255,255,0.90),inset_0_-2px_3px_rgba(120,55,37,0.16),0_3px_0_rgba(167,83,61,0.42),0_7px_14px_rgba(75,40,31,0.22)]",
+          "[--mq-thumb-shadow-hover:inset_0_2px_2px_rgba(255,255,255,0.96),inset_0_-2px_3px_rgba(120,55,37,0.16),0_4px_0_rgba(167,83,61,0.44),0_9px_18px_rgba(75,40,31,0.27)]",
           "[--mq-on-text:#4a1d13] [--mq-off-text:#463a2e] [--mq-icon:#4a1d13] [--mq-ring:#171817]",
         ].join(" "),
         glass: [
           "[--mq-track-off:rgba(255,255,255,0.62)] [--mq-track-on:rgba(23,24,23,0.74)]",
           "[--mq-track-brd:rgba(255,255,255,0.72)]",
           "[--mq-thumb-bg:#ffffff] [--mq-thumb-brd:rgba(255,255,255,0.9)]",
+          "[--mq-track-image:linear-gradient(180deg,rgba(255,255,255,0.52)_0%,rgba(255,255,255,0.12)_35%,rgba(255,255,255,0)_100%)]",
+          "[--mq-track-shadow:inset_0_1px_0_rgba(255,255,255,0.88),inset_0_-1px_0_rgba(20,28,35,0.16),0_8px_22px_rgba(22,32,43,0.18)]",
+          "[--mq-thumb-image:linear-gradient(145deg,rgba(255,255,255,1)_0%,rgba(255,255,255,0.72)_52%,rgba(188,215,224,0.46)_100%)]",
+          "[--mq-thumb-shadow:inset_0_1px_0_rgba(255,255,255,1),0_3px_10px_rgba(16,36,46,0.28)]",
+          "[--mq-thumb-shadow-hover:inset_0_1px_0_rgba(255,255,255,1),0_5px_15px_rgba(16,36,46,0.36)]",
+          "[--mq-track-blur:14px] [--mq-track-saturate:160%]",
           "[--mq-on-text:#ffffff] [--mq-off-text:#23231f] [--mq-icon:#23231f] [--mq-ring:#171817]",
         ].join(" "),
         skeuo: [
           "[--mq-track-off:#bfbbb2] [--mq-track-on:#c2e05a]",
           "[--mq-track-brd:rgba(25,25,23,0.34)]",
           "[--mq-thumb-bg:#fbfaf6] [--mq-thumb-brd:rgba(25,25,23,0.32)]",
+          "[--mq-track-image:linear-gradient(180deg,rgba(31,30,27,0.20)_0%,rgba(255,255,255,0.24)_48%,rgba(255,255,255,0.08)_100%)]",
+          "[--mq-track-shadow:inset_0_3px_6px_rgba(33,31,27,0.42),inset_0_-1px_0_rgba(255,255,255,0.72),0_1px_0_rgba(255,255,255,0.88)]",
+          "[--mq-thumb-image:linear-gradient(180deg,#ffffff_0%,#f5f2ea_43%,#c7c1b7_100%)]",
+          "[--mq-thumb-shadow:inset_0_2px_1px_rgba(255,255,255,1),inset_0_-3px_4px_rgba(33,31,27,0.18),0_3px_0_#8f8a81,0_7px_13px_rgba(35,33,29,0.30)]",
+          "[--mq-thumb-shadow-hover:inset_0_2px_1px_rgba(255,255,255,1),inset_0_-3px_4px_rgba(33,31,27,0.18),0_4px_0_#8f8a81,0_9px_17px_rgba(35,33,29,0.34)]",
           "[--mq-on-text:#23231f] [--mq-off-text:#23231f] [--mq-icon:#23231f] [--mq-ring:#171817]",
         ].join(" "),
         // Polymorphic: no ornament to speak of. It adapts instead — the palette
@@ -87,10 +109,15 @@ const toggleVariants = cva(
           "[--mq-track-off:#e3e1db] [--mq-track-on:#171817]",
           "[--mq-track-brd:rgba(23,24,23,0.18)]",
           "[--mq-thumb-bg:#ffffff] [--mq-thumb-brd:rgba(23,24,23,0.18)]",
+          "[--mq-track-image:none] [--mq-track-shadow:inset_0_1px_2px_rgba(23,24,23,0.18)]",
+          "[--mq-thumb-image:none] [--mq-thumb-shadow:0_2px_7px_rgba(23,24,23,0.20)]",
+          "[--mq-thumb-shadow-hover:0_5px_14px_rgba(23,24,23,0.30)]",
           "[--mq-on-text:#f6f5f1] [--mq-off-text:#2b2b26] [--mq-icon:#171817] [--mq-ring:#171817]",
           "dark:[--mq-track-off:#3a3a40] dark:[--mq-track-on:#f1efe9]",
           "dark:[--mq-track-brd:rgba(255,255,255,0.22)]",
           "dark:[--mq-thumb-bg:#f1efe9] dark:[--mq-thumb-brd:rgba(255,255,255,0.28)]",
+          "dark:[--mq-track-shadow:inset_0_1px_2px_rgba(0,0,0,0.42)]",
+          "dark:[--mq-thumb-shadow:0_2px_8px_rgba(0,0,0,0.40)] dark:[--mq-thumb-shadow-hover:0_6px_16px_rgba(0,0,0,0.56)]",
           "dark:[--mq-on-text:#171817] dark:[--mq-off-text:#e6e4de] dark:[--mq-ring:#f1efe9]",
           // In dark mode the checked track is near-white, so a near-white thumb
           // would vanish into it. The thumb inverts with the state.
@@ -132,11 +159,14 @@ const TRACK = [
   "border-[var(--mq-track-brd,rgba(120,60,40,0.20))]",
   "bg-[var(--mq-track-off,#e7d9cc)]",
   "data-[state=checked]:bg-[var(--mq-track-on,#ff9077)]",
-  "shadow-[inset_0_2px_4px_rgba(0,0,0,0.18)]",
+  "[background-image:var(--mq-track-image,linear-gradient(180deg,rgba(255,255,255,0.46),rgba(112,48,31,0.10)))]",
+  "shadow-[var(--mq-track-shadow,inset_0_2px_4px_rgba(0,0,0,0.18))]",
+  "backdrop-blur-[var(--mq-track-blur,0px)] backdrop-saturate-[var(--mq-track-saturate,100%)]",
   "transition-[background-color] duration-200 ease-out motion-reduce:transition-none",
   // Forced colors discards the fills, so the track would become an empty
   // outline. System colors keep it a legible container.
-  "forced-colors:border-[CanvasText] forced-colors:bg-[ButtonFace]",
+  "forced-colors:border-[CanvasText] forced-colors:bg-[ButtonFace] forced-colors:shadow-none",
+  "forced-colors:[background-image:none] forced-colors:backdrop-filter-none",
 ].join(" ");
 
 /** The thumb: travels by exactly `--mq-travel` when checked. */
@@ -144,14 +174,18 @@ const THUMB = [
   "pointer-events-none z-10 grid place-items-center rounded-full border",
   "size-[var(--mq-thumb,20px)]",
   "border-[var(--mq-thumb-brd,rgba(120,60,40,0.22))] bg-[var(--mq-thumb-bg,#fffaf6)]",
-  "shadow-[0_2px_4px_rgba(40,25,18,0.28)]",
-  "translate-x-0 data-[state=checked]:translate-x-[var(--mq-travel,20px)]",
+  "[background-image:var(--mq-thumb-image,linear-gradient(180deg,#ffffff,#f1ded4))]",
+  "shadow-[var(--mq-thumb-shadow,0_2px_4px_rgba(40,25,18,0.28))]",
+  "scale-100 translate-x-0 data-[state=checked]:translate-x-[var(--mq-travel,20px)]",
+  "group-hover/toggle:shadow-[var(--mq-thumb-shadow-hover,0_5px_14px_rgba(40,25,18,0.32))]",
+  "group-active/toggle:scale-[0.88]",
   // `translate`, not `transform`: Tailwind v4's translate utilities write the
   // standalone `translate` property, so transitioning `transform` animates
   // nothing and the thumb teleports across the track.
-  "transition-[translate,background-color,border-color] duration-200 ease-out",
-  "motion-reduce:transition-none",
-  "forced-colors:bg-[ButtonText] forced-colors:border-[ButtonText]",
+  "transition-[translate,scale,box-shadow,background-color,border-color] duration-300 ease-[cubic-bezier(0.22,1.55,0.36,1)]",
+  "motion-reduce:transition-none motion-reduce:group-active/toggle:scale-100",
+  "forced-colors:bg-[ButtonText] forced-colors:border-[ButtonText] forced-colors:shadow-none",
+  "forced-colors:[background-image:none]",
 ].join(" ");
 
 /**
