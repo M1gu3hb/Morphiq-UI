@@ -68,7 +68,13 @@ const cardVariants = cva(
     "border text-left",
     "gap-[var(--mq-gap,14px)] p-[var(--mq-pad,22px)] rounded-[var(--mq-radius,24px)]",
     "text-[color:var(--mq-text,#2b2b26)]",
-    "transition-[transform,box-shadow,background-color,backdrop-filter] duration-200 ease-out",
+    // `translate`, not `transform`: Tailwind v4's `translate-*` utilities write
+    // the standalone `translate` property (`.translate-x-0{translate:var(...)}`),
+    // so listing `transform` here animated nothing and the interactive hover
+    // lift snapped instead of moving. Nothing in this file sets `transform` —
+    // no rotate, scale, skew or arbitrary transform — so it is dropped rather
+    // than kept alongside.
+    "transition-[translate,box-shadow,background-color,backdrop-filter] duration-200 ease-out",
     "motion-reduce:transition-none",
     // Shadows and translucency are erased in forced-colors mode, so the card
     // would dissolve into the page. A system-colored border keeps its bounds.

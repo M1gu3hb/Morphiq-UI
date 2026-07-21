@@ -427,6 +427,135 @@ function globalClassLeaks(path, sourceFile, chromeClasses) {
   return leaks;
 }
 
+/**
+ * Marker a component can carry to opt out of the transition guard below.
+ * Documented so a legitimate un-animated state translate stays greppable
+ * instead of being silenced by loosening the rule for everyone.
+ */
+const transitionGuardOptOut = "mq-allow-untransitioned-translate";
+
+/**
+ * Splits the suite's style literals into individual class tokens.
+ *
+ * Deduplicated by source position, then ordered by it: `styleLiterals` can
+ * reach the same literal twice — once at the `cva(...)` call itself and again
+ * through the `cn(buttonVariants(...))` identifier that references it — which
+ * would otherwise report every finding twice and make "first at line" unstable.
+ */
+function styleTokens(sourceFile) {
+  const tokens = new Map();
+  for (const literal of styleLiterals(sourceFile)) {
+    let offset = 0;
+    for (const token of literal.text.split(/\s+/)) {
+      if (!token) continue;
+      const tokenOffset = literal.text.indexOf(token, offset);
+      offset = tokenOffset + token.length;
+      const position = literal.position + tokenOffset;
+      if (!tokens.has(position)) tokens.set(position, { position, token });
+    }
+  }
+  return [...tokens.values()].sort((left, right) => left.position - right.position);
+}
+
+/** `hover:-translate-y-[2px]` -> `hover:-translate-y-`, so `:` can be located. */
+function withoutBracketGroups(token) {
+  return token.replace(/\[[^\]]*\]/g, "");
+}
+
+/** True for `translate-*` applied under a variant, not as a static offset. */
+function isStateScopedTranslate(token) {
+  const bare = withoutBracketGroups(token);
+  const index = bare.search(/-?translate-[xyz]-/);
+  if (index === -1) return false;
+  return bare.slice(0, index).includes(":");
+}
+
+/** Property list of an arbitrary `transition-[a,b]`, or null for other tokens. */
+function arbitraryTransitionProperties(token) {
+  const match = /^transition-\[([^\]]*)\]$/.exec(token);
+  if (!match) return null;
+  return match[1]
+    .split(",")
+    .map((property) => property.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Whether a token ends up animating the `translate` property.
+ *
+ * The named utilities are not literal: in Tailwind v4 `transition`,
+ * `transition-all` and `transition-transform` all expand to property lists that
+ * already contain `translate` (`transition-transform` is
+ * `transform, translate, scale, rotate`). Only the arbitrary form emits exactly
+ * what was written, which is why it is the only one that can get this wrong.
+ */
+function transitionCoversTranslate(token) {
+  if (token === "transition" || token === "transition-all" || token === "transition-transform") {
+    return true;
+  }
+  const properties = arbitraryTransitionProperties(token);
+  return properties !== null && properties.includes("translate");
+}
+
+/**
+ * Catches the Tailwind v4 `translate` vs `transform` trap.
+ *
+ * `translate-*` utilities write the standalone `translate` property
+ * (`.translate-x-0{translate:var(--tw-translate-x) var(--tw-translate-y)}`),
+ * not `transform`. A component that declares `transition-[transform,…]` beside
+ * `hover:-translate-y-*` therefore animates nothing: the motion snaps. Both
+ * Button and Card shipped with exactly that.
+ *
+ * The heuristic is deliberately narrow, to keep false positives near zero:
+ *
+ *   1. Only class tokens the suite already treats as styles are considered
+ *      (`cn`/`clsx`/`cva`/`tv` arguments and `className` attributes), so prose
+ *      and unrelated string literals are out of scope.
+ *   2. It fires only when the file applies `translate-*` under a variant
+ *      (`hover:`, `active:`, `data-[state=…]:`, …) — motion meant to be a state
+ *      change, not a static offset.
+ *   3. It fires only when some arbitrary `transition-[…]` names `transform`,
+ *      which is the author explicitly asking for that motion to animate. A file
+ *      that simply never transitions its translate is left alone: that is a
+ *      legitimate choice, not a bug.
+ *   4. It stays silent if anything in the file already covers `translate`.
+ *
+ * The unit is the file, not the individual literal: a component's classes are
+ * split across a cva base, its variants and its compound variants, so the
+ * transition and the translate belonging to the same element routinely live in
+ * different string literals. Scoping this per-literal would miss the very bug
+ * it exists to catch.
+ *
+ * Known limitation: a file where one element animates a real `transform`
+ * (rotate/scale) while a *different* element intentionally translates without a
+ * transition would be flagged. No component does that today; such a file can
+ * either add `translate` to the list (harmless) or carry the
+ * `mq-allow-untransitioned-translate` opt-out.
+ */
+function transitionPropertyLeaks(path, source, sourceFile) {
+  if (source.includes(transitionGuardOptOut)) return [];
+
+  const tokens = styleTokens(sourceFile);
+  const stateTranslates = tokens.filter((entry) => isStateScopedTranslate(entry.token));
+  if (stateTranslates.length === 0) return [];
+  if (tokens.some((entry) => transitionCoversTranslate(entry.token))) return [];
+
+  const firstTranslateLine = lineNumber(sourceFile, stateTranslates[0].position);
+  return tokens
+    .filter((entry) => {
+      const properties = arbitraryTransitionProperties(entry.token);
+      return (
+        properties !== null &&
+        properties.includes("transform") &&
+        !properties.includes("translate")
+      );
+    })
+    .map(
+      (entry) =>
+        `${repoRelative(path)}:${lineNumber(sourceFile, entry.position)} transitions \`transform\` but the component animates \`translate-*\` under a variant (first at line ${firstTranslateLine}). Tailwind v4 writes translate utilities to the \`translate\` property, so this transition animates nothing — add \`translate\` to the list.`,
+    );
+}
+
 function registryFiles(directory) {
   const files = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -505,6 +634,13 @@ try {
       containmentLeaks.length,
       0,
       `${entry.slug}: self-contained contract leaks:\n${containmentLeaks.join("\n")}`,
+    );
+
+    const motionLeaks = transitionPropertyLeaks(sourcePath, source, sourceFile);
+    assert.equal(
+      motionLeaks.length,
+      0,
+      `${entry.slug}: transition animates the wrong property:\n${motionLeaks.join("\n")}`,
     );
 
     const actualDependencies = dependencyClosure(sourcePath);
