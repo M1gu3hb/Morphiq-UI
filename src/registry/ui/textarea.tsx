@@ -63,11 +63,11 @@ const MATERIAL_TOKENS = {
     "[--mq-ring:#171817] [--mq-error:#8f2a1e]",
   ].join(" "),
   skeuo: [
-    "[--mq-field:#e4e7ea] [--mq-field-strong:#d6dade] [--mq-edge:#a4a9ae]",
-    "[--mq-grad:linear-gradient(180deg,#f0f2f3,#dadddf)]",
-    "[--mq-grad-strong:linear-gradient(180deg,#e5e8ea,#ced2d5)]",
-    "[--mq-brd:rgba(30,34,38,0.38)] [--mq-brd-focus:#41474d]",
-    "[--mq-text:#202326] [--mq-placeholder:#4c5257]",
+    "[--mq-field:#e6e3da] [--mq-field-strong:#d7d3c9] [--mq-edge:#a8a49b]",
+    "[--mq-grad:linear-gradient(180deg,#f2efe7,#dcd8ce)]",
+    "[--mq-grad-strong:linear-gradient(180deg,#e4e0d6,#cec9be)]",
+    "[--mq-brd:rgba(25,25,23,0.52)] [--mq-brd-focus:rgba(25,25,23,0.60)]",
+    "[--mq-text:#23231f] [--mq-placeholder:#4a4943]",
     "[--mq-ring:#171817] [--mq-error:#8f2a1e]",
   ].join(" "),
   // Polymorphic: no ornament. It adapts — the palette follows the colour
@@ -109,12 +109,12 @@ const DEPTH = {
       "data-[focus=true]:shadow-[inset_0_1px_0_rgba(255,255,255,0.94),inset_0_-1px_0_rgba(255,255,255,0.20),inset_0_8px_18px_rgba(24,20,40,0.22),0_3px_8px_rgba(24,20,40,0.12)]",
   },
   skeuo: {
-    rest: "shadow-[inset_0_1px_0_rgba(255,255,255,0.94),inset_0_-5px_8px_rgba(30,34,38,0.15),inset_0_0_0_rgba(30,34,38,0),0_3px_0_var(--mq-edge,#a4a9ae),0_7px_16px_rgba(38,43,48,0.22)]",
+    rest: "shadow-[inset_0_1px_0_rgba(255,255,255,0.94),inset_0_-5px_8px_rgba(0,0,0,0.15),inset_0_0_0_rgba(0,0,0,0),0_3px_0_var(--mq-edge,#a8a49b),0_7px_16px_rgba(38,36,31,0.22)]",
     hover:
-      "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.99),inset_0_-5px_8px_rgba(30,34,38,0.17),inset_0_0_0_rgba(30,34,38,0),0_4px_0_var(--mq-edge,#a4a9ae),0_11px_22px_rgba(38,43,48,0.27)]",
+      "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.99),inset_0_-5px_8px_rgba(0,0,0,0.17),inset_0_0_0_rgba(0,0,0,0),0_4px_0_var(--mq-edge,#a8a49b),0_11px_22px_rgba(38,36,31,0.27)]",
     focus:
-      "focus-visible:shadow-[inset_0_1px_0_rgba(255,255,255,0.70),inset_0_-3px_6px_rgba(30,34,38,0.10),inset_0_8px_17px_rgba(30,34,38,0.30),0_1px_0_var(--mq-edge,#a4a9ae),0_3px_5px_rgba(38,43,48,0.15)] " +
-      "data-[focus=true]:shadow-[inset_0_1px_0_rgba(255,255,255,0.70),inset_0_-3px_6px_rgba(30,34,38,0.10),inset_0_8px_17px_rgba(30,34,38,0.30),0_1px_0_var(--mq-edge,#a4a9ae),0_3px_5px_rgba(38,43,48,0.15)]",
+      "focus-visible:shadow-[inset_0_1px_0_rgba(255,255,255,0.70),inset_0_-3px_6px_rgba(0,0,0,0.10),inset_0_8px_17px_rgba(0,0,0,0.30),0_1px_0_var(--mq-edge,#a8a49b),0_3px_5px_rgba(38,36,31,0.15)] " +
+      "data-[focus=true]:shadow-[inset_0_1px_0_rgba(255,255,255,0.70),inset_0_-3px_6px_rgba(0,0,0,0.10),inset_0_8px_17px_rgba(0,0,0,0.30),0_1px_0_var(--mq-edge,#a8a49b),0_3px_5px_rgba(38,36,31,0.15)]",
   },
   adaptive: {
     rest: "shadow-[inset_0_0_0_rgba(20,20,18,0),0_2px_5px_rgba(20,20,18,0.10)]",

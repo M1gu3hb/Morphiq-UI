@@ -38,9 +38,15 @@ const avatarVariants = cva(
     "size-[var(--mq-size,48px)] p-[var(--mq-frame,3px)]",
     "border-[var(--mq-brd,rgba(74,57,42,0.24))] bg-[var(--mq-frame-bg,#d9bfa3)]",
     "text-[color:var(--mq-text,#3b2c23)]",
+    // Tailwind 4 writes `scale` as its own property, so name exactly that
+    // property. The outline is an immediate affordance, not animated motion.
+    "transition-[scale] duration-200 ease-out hover:scale-[1.04]",
+    "hover:outline-2 hover:outline-offset-[3px] hover:outline-[var(--mq-ring,#171817)]",
+    "motion-reduce:transition-none motion-reduce:hover:scale-100",
+    "data-[state=disabled]:hover:scale-100",
     "data-[state=disabled]:opacity-55 data-[state=loading]:cursor-progress",
     FOCUS_RING,
-    "forced-colors:border-[CanvasText] forced-colors:bg-[Canvas] forced-colors:text-[CanvasText] forced-colors:shadow-none",
+    "forced-colors:border-[CanvasText] forced-colors:bg-[Canvas] forced-colors:text-[CanvasText] forced-colors:shadow-none forced-colors:hover:outline-[Highlight]",
   ].join(" "),
   {
     variants: {
