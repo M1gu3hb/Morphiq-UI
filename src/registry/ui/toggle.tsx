@@ -46,6 +46,7 @@ const toggleVariants = cva(
     // the switch has no surface of its own behind that text, so any fixed value
     // would be a guess about the page it is dropped into.
     "text-[color:currentColor] text-[length:13px] leading-[1.3] font-bold",
+    "transition-opacity duration-200 ease-out motion-reduce:transition-none",
     // Travel is derived so a wider track (the `labeled` variant) moves the thumb
     // further without restating the geometry. Underscores are Tailwind's escape
     // for the spaces `calc()` requires around its operators.
@@ -148,7 +149,7 @@ const THUMB = [
   // `translate`, not `transform`: Tailwind v4's translate utilities write the
   // standalone `translate` property, so transitioning `transform` animates
   // nothing and the thumb teleports across the track.
-  "transition-[translate,background-color] duration-200 ease-out",
+  "transition-[translate,background-color,border-color] duration-200 ease-out",
   "motion-reduce:transition-none",
   "forced-colors:bg-[ButtonText] forced-colors:border-[ButtonText]",
 ].join(" ");
