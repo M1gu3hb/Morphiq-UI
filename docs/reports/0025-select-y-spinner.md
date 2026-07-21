@@ -322,9 +322,15 @@ la interfaz sigue viva. Suelo 3:1.
 | clay | `#9f2f23` / `#f0dcd0` | **5,46:1** |
 | glass | `#0b3f4c` / `rgba(255,255,255,0.62)` | **4,29:1** (peor caso, sobre negro puro) |
 
-El vidrio obligó a rediseñar: con pista al 45% y 55% de blanco el arco caía a **1,57:1 y 2,23:1**
-sobre fondo negro — incumplimiento claro. Subir la pista a 0,62 y oscurecer el arco lo lleva a
-4,29:1 en el peor caso.
+El vidrio obligó a rediseñar: con pista al 45% y 55% de blanco y el arco más claro `#075d70`, la
+relación caía a **1,57:1 y 2,23:1** sobre fondo negro — incumplimiento claro. Subir la pista a
+0,62 y oscurecer el arco a `#0b3f4c` lo lleva a 4,29:1 en el peor caso.
+
+**El sentido del arreglo es contraintuitivo y conviene dejarlo escrito:** sobre un fondo oscuro
+una pista blanca translúcida se compone **más oscura**, no más clara. Así que subir la opacidad
+la *aleja* del arco, y al arco hay que **oscurecerlo**, no aclararlo. Medido con el arco final:
+alpha 0,40 → 2,00:1 · 0,50 → 2,89:1 · 0,55 → 3,42:1 · 0,62 → 4,29:1 · 0,80 → 7,15:1. La cifra
+sube monótonamente con la opacidad.
 
 ## Verificación en navegador (build de producción)
 
@@ -414,6 +420,25 @@ Las librerías de formularios devuelven a menudo `""` en lugar de `null` para "s
 `errorText != null` lo tomaba como error: borde rojo, `aria-invalid="true"` y un
 `aria-describedby` apuntando a un mensaje vacío. Corregido con la misma comprobación de texto
 real.
+
+## Hallazgo 12 — la prosa publicada invertía la causa del arreglo del vidrio
+
+El único hallazgo que sobrevivió a la refutación y que **no** había detectado yo. La cadena
+`a11y` de `entries/spinner.ts` decía: «…compuesta sobre negro puro, **donde una pista más clara
+incumplía el listón** directamente».
+
+Está al revés. Sobre negro, una pista blanca translúcida más clara (más opaca) da **más**
+contraste contra el arco oscuro, no menos: alpha 0,80 → 7,15:1. La que incumple es la **más
+transparente**: alpha 0,50 → 2,89:1.
+
+No es una errata de estilo: es documentación de cara al usuario en la página del componente.
+Alguien derivando su propia pista translúcida de esa frase concluiría que aclararla es la
+dirección peligrosa, bajaría la opacidad y aterrizaría por debajo del 3:1 que la misma frase
+promete. Corregido en inglés y en español, y ampliado en la tabla de arriba con la serie
+completa medida.
+
+Lección repetida de rondas anteriores: **verifiqué los números y luego escribí mal el porqué.**
+Medir la cifra no es lo mismo que explicar correctamente qué la mueve.
 
 ## Lo que la revisión NO cambió
 
