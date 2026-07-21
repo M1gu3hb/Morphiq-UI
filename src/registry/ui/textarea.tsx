@@ -21,6 +21,9 @@ import { cn } from "@/lib/cn";
  *
  *   --mq-field         control background
  *   --mq-field-strong  control background for the `filled` variant
+ *   --mq-grad          material lighting over the default surface
+ *   --mq-grad-strong   material lighting over the filled surface
+ *   --mq-edge          tactile contact edge
  *   --mq-brd           resting border
  *   --mq-brd-focus     border once focused
  *   --mq-text          typed text
@@ -44,28 +47,35 @@ import { cn } from "@/lib/cn";
  */
 const MATERIAL_TOKENS = {
   clay: [
-    "[--mq-field:#fdf6f0] [--mq-field-strong:#f4e7db]",
+    "[--mq-field:#f7e9de] [--mq-field-strong:#efd9c8] [--mq-edge:#dcc4b2]",
+    "[--mq-grad:linear-gradient(180deg,rgba(255,255,255,0.38),rgba(151,92,58,0.06))]",
+    "[--mq-grad-strong:linear-gradient(180deg,rgba(255,255,255,0.26),rgba(151,92,58,0.08))]",
     "[--mq-brd:rgba(120,80,55,0.30)] [--mq-brd-focus:#c9482f]",
     "[--mq-text:#33261e] [--mq-placeholder:#6a5346]",
     "[--mq-ring:#171817] [--mq-error:#9c2f22]",
   ].join(" "),
   glass: [
-    "[--mq-field:rgba(255,255,255,0.66)] [--mq-field-strong:rgba(255,255,255,0.82)]",
+    "[--mq-field:rgba(255,255,255,0.66)] [--mq-field-strong:rgba(255,255,255,0.82)] [--mq-edge:rgba(255,255,255,0.86)]",
+    "[--mq-grad:linear-gradient(180deg,rgba(255,255,255,0.34),rgba(255,255,255,0))]",
+    "[--mq-grad-strong:linear-gradient(180deg,rgba(255,255,255,0.42),rgba(255,255,255,0))]",
     "[--mq-brd:rgba(255,255,255,0.75)] [--mq-brd-focus:rgba(255,255,255,0.98)]",
     "[--mq-text:#1e1e1b] [--mq-placeholder:#36362f]",
     "[--mq-ring:#171817] [--mq-error:#8f2a1e]",
   ].join(" "),
   skeuo: [
-    "[--mq-field:#e6e3da] [--mq-field-strong:#d7d3c9]",
-    "[--mq-brd:rgba(25,25,23,0.34)] [--mq-brd-focus:rgba(25,25,23,0.6)]",
-    "[--mq-text:#23231f] [--mq-placeholder:#4a4943]",
+    "[--mq-field:#e4e7ea] [--mq-field-strong:#d6dade] [--mq-edge:#a4a9ae]",
+    "[--mq-grad:linear-gradient(180deg,#f0f2f3,#dadddf)]",
+    "[--mq-grad-strong:linear-gradient(180deg,#e5e8ea,#ced2d5)]",
+    "[--mq-brd:rgba(30,34,38,0.38)] [--mq-brd-focus:#41474d]",
+    "[--mq-text:#202326] [--mq-placeholder:#4c5257]",
     "[--mq-ring:#171817] [--mq-error:#8f2a1e]",
   ].join(" "),
   // Polymorphic: no ornament. It adapts — the palette follows the colour
   // scheme. Safe here because the control has an opaque surface that flips
   // together with its text.
   adaptive: [
-    "[--mq-field:#ffffff] [--mq-field-strong:#f1f0ec]",
+    "[--mq-field:#ffffff] [--mq-field-strong:#f1f0ec] [--mq-edge:transparent]",
+    "[--mq-grad:none] [--mq-grad-strong:none]",
     "[--mq-brd:rgba(23,24,23,0.22)] [--mq-brd-focus:#171817]",
     "[--mq-text:#1c1c19] [--mq-placeholder:#55554e]",
     "[--mq-ring:#171817] [--mq-error:#9c2f22]",
@@ -76,65 +86,117 @@ const MATERIAL_TOKENS = {
   ].join(" "),
 } as const;
 
+/**
+ * Multi-line depth uses broader layers than Input, but the interpolation rule
+ * is identical: every state retains the same layer count and inset order.
+ * Shadows never affect layout, scrollHeight or the native resize handle.
+ */
+const DEPTH = {
+  clay: {
+    rest: "shadow-[inset_0_4px_6px_rgba(255,255,255,0.76),inset_0_-6px_10px_rgba(140,90,60,0.13),inset_0_0_0_rgba(120,60,40,0),0_3px_0_var(--mq-edge,#dcc4b2),0_8px_18px_rgba(90,60,45,0.14)]",
+    hover:
+      "hover:shadow-[inset_0_4px_6px_rgba(255,255,255,0.86),inset_0_-6px_10px_rgba(140,90,60,0.16),inset_0_0_0_rgba(120,60,40,0),0_5px_0_var(--mq-edge,#dcc4b2),0_12px_24px_rgba(90,60,45,0.19)]",
+    focus:
+      "focus-visible:shadow-[inset_0_3px_5px_rgba(255,255,255,0.54),inset_0_-4px_8px_rgba(140,90,60,0.09),inset_0_8px_16px_rgba(120,60,40,0.25),0_1px_0_var(--mq-edge,#dcc4b2),0_3px_6px_rgba(90,60,45,0.10)] " +
+      "data-[focus=true]:shadow-[inset_0_3px_5px_rgba(255,255,255,0.54),inset_0_-4px_8px_rgba(140,90,60,0.09),inset_0_8px_16px_rgba(120,60,40,0.25),0_1px_0_var(--mq-edge,#dcc4b2),0_3px_6px_rgba(90,60,45,0.10)]",
+  },
+  glass: {
+    rest: "shadow-[inset_0_1px_0_rgba(255,255,255,0.86),inset_0_-1px_0_rgba(255,255,255,0.22),inset_0_0_0_rgba(24,20,40,0),0_10px_28px_rgba(24,20,40,0.16)]",
+    hover:
+      "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.96),inset_0_-1px_0_rgba(255,255,255,0.27),inset_0_0_0_rgba(24,20,40,0),0_15px_36px_rgba(24,20,40,0.23)] hover:backdrop-blur-[22px]",
+    focus:
+      "focus-visible:shadow-[inset_0_1px_0_rgba(255,255,255,0.94),inset_0_-1px_0_rgba(255,255,255,0.20),inset_0_8px_18px_rgba(24,20,40,0.22),0_3px_8px_rgba(24,20,40,0.12)] " +
+      "data-[focus=true]:shadow-[inset_0_1px_0_rgba(255,255,255,0.94),inset_0_-1px_0_rgba(255,255,255,0.20),inset_0_8px_18px_rgba(24,20,40,0.22),0_3px_8px_rgba(24,20,40,0.12)]",
+  },
+  skeuo: {
+    rest: "shadow-[inset_0_1px_0_rgba(255,255,255,0.94),inset_0_-5px_8px_rgba(30,34,38,0.15),inset_0_0_0_rgba(30,34,38,0),0_3px_0_var(--mq-edge,#a4a9ae),0_7px_16px_rgba(38,43,48,0.22)]",
+    hover:
+      "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.99),inset_0_-5px_8px_rgba(30,34,38,0.17),inset_0_0_0_rgba(30,34,38,0),0_4px_0_var(--mq-edge,#a4a9ae),0_11px_22px_rgba(38,43,48,0.27)]",
+    focus:
+      "focus-visible:shadow-[inset_0_1px_0_rgba(255,255,255,0.70),inset_0_-3px_6px_rgba(30,34,38,0.10),inset_0_8px_17px_rgba(30,34,38,0.30),0_1px_0_var(--mq-edge,#a4a9ae),0_3px_5px_rgba(38,43,48,0.15)] " +
+      "data-[focus=true]:shadow-[inset_0_1px_0_rgba(255,255,255,0.70),inset_0_-3px_6px_rgba(30,34,38,0.10),inset_0_8px_17px_rgba(30,34,38,0.30),0_1px_0_var(--mq-edge,#a4a9ae),0_3px_5px_rgba(38,43,48,0.15)]",
+  },
+  adaptive: {
+    rest: "shadow-[inset_0_0_0_rgba(20,20,18,0),0_2px_5px_rgba(20,20,18,0.10)]",
+    hover: "hover:shadow-[inset_0_0_0_rgba(20,20,18,0),0_9px_22px_rgba(20,20,18,0.16)]",
+    focus:
+      "focus-visible:shadow-[inset_0_5px_12px_rgba(20,20,18,0.17),0_2px_4px_rgba(20,20,18,0.08)] " +
+      "data-[focus=true]:shadow-[inset_0_5px_12px_rgba(20,20,18,0.17),0_2px_4px_rgba(20,20,18,0.08)]",
+  },
+} as const;
+
 type TextareaMaterial = keyof typeof MATERIAL_TOKENS;
 type TextareaVariant = "default" | "filled" | "underline";
 type TextareaSize = "sm" | "md" | "lg";
 
 const textareaVariants = cva(
   [
-    "block w-full appearance-none border bg-[var(--mq-field,#fdf6f0)]",
+    "block w-full appearance-none border",
     "text-[color:var(--mq-text,#33261e)]",
     "placeholder:text-[color:var(--mq-placeholder,#6a5346)]",
     // Exactly the properties that change — nothing phantom. Border colour moves
-    // on focus and on error, background colour when the material or the
-    // treatment changes, and opacity when disabled. `box-shadow` is
-    // deliberately absent: nothing here ever sets one, so listing it would
-    // animate a property that never moves. `outline` is absent too, but for the
-    // opposite reason — a focus ring has to be there the instant focus lands,
-    // not fade in over 200ms.
-    "transition-[border-color,background-color,opacity] duration-200 ease-out",
+    // on focus and on error, background colour when the material or treatment
+    // changes, box-shadow on hover/focus, backdrop-filter on glass hover and
+    // opacity when disabled. `outline` is deliberately absent: the focus ring
+    // has to appear the instant focus lands, not fade in over 200ms.
+    "transition-[border-color,background-color,box-shadow,backdrop-filter,opacity] duration-200 ease-out",
     "motion-reduce:transition-none",
     "focus-visible:outline-2 focus-visible:outline-offset-[2px]",
     "focus-visible:outline-[var(--mq-ring,#171817)]",
     "data-[focus=true]:outline-2 data-[focus=true]:outline-offset-[2px]",
     "data-[focus=true]:outline-[var(--mq-ring,#171817)]",
+    "focus-visible:border-[var(--mq-brd-focus,#c9482f)]",
+    "data-[focus=true]:border-[var(--mq-brd-focus,#c9482f)]",
     "forced-colors:focus-visible:outline-[Highlight]",
     // Forced colours drop every fill and shadow, so a field styled only by its
     // background would vanish into the page.
-    "forced-colors:border-[CanvasText]",
+    "forced-colors:border-[CanvasText] forced-colors:shadow-none",
+    "forced-colors:[background-image:none] forced-colors:backdrop-filter-none",
     "disabled:cursor-not-allowed disabled:opacity-55",
     // `aria-invalid` is the single source of truth for the error look: no
     // separate prop can drift out of sync with what assistive tech is told.
     "aria-[invalid=true]:border-[var(--mq-error,#9c2f22)]",
+    "aria-[invalid=true]:focus-visible:border-[var(--mq-error,#9c2f22)]",
+    "aria-[invalid=true]:data-[focus=true]:border-[var(--mq-error,#9c2f22)]",
     "aria-[invalid=true]:focus-visible:outline-[var(--mq-error,#9c2f22)]",
     "forced-colors:aria-[invalid=true]:border-[Mark]",
   ].join(" "),
   {
     variants: {
       material: {
-        clay: MATERIAL_TOKENS.clay,
-        glass: `${MATERIAL_TOKENS.glass} backdrop-blur-[16px] backdrop-saturate-[170%]`,
-        skeuo: MATERIAL_TOKENS.skeuo,
-        adaptive: MATERIAL_TOKENS.adaptive,
+        clay: `${MATERIAL_TOKENS.clay} ${DEPTH.clay.rest} ${DEPTH.clay.hover} ${DEPTH.clay.focus}`,
+        glass: `${MATERIAL_TOKENS.glass} backdrop-blur-[18px] backdrop-saturate-[170%] ${DEPTH.glass.rest} ${DEPTH.glass.hover} ${DEPTH.glass.focus}`,
+        skeuo: `${MATERIAL_TOKENS.skeuo} ${DEPTH.skeuo.rest} ${DEPTH.skeuo.hover} ${DEPTH.skeuo.focus}`,
+        adaptive: `${MATERIAL_TOKENS.adaptive} ${DEPTH.adaptive.rest} ${DEPTH.adaptive.hover} ${DEPTH.adaptive.focus} pointer-coarse:min-h-[120px]`,
       },
       size: {
-        sm: "[--mq-radius:10px] px-[10px] py-[8px] text-[length:12px] leading-[1.55]",
-        md: "[--mq-radius:13px] px-[13px] py-[10px] text-[length:13px] leading-[1.6]",
-        lg: "[--mq-radius:16px] px-[16px] py-[12px] text-[length:14px] leading-[1.65]",
+        sm: "[--mq-radius:10px] px-[10px] py-[8px] text-[12px]/[1.55]",
+        md: "[--mq-radius:13px] px-[13px] py-[10px] text-[13px]/[1.6]",
+        lg: "[--mq-radius:16px] px-[16px] py-[12px] text-[14px]/[1.65]",
       },
       // Declared after `size` so `underline` can drop the padding and radius the
       // size axis sets.
       variant: {
-        default: "rounded-[var(--mq-radius,13px)] border-[var(--mq-brd,rgba(120,80,55,0.30))]",
+        default: [
+          "rounded-[var(--mq-radius,13px)] border-[var(--mq-brd,rgba(120,80,55,0.30))]",
+          "[background-color:var(--mq-field,#f7e9de)]",
+          "[background-image:var(--mq-grad,none)]",
+        ].join(" "),
         filled: [
           "rounded-[var(--mq-radius,13px)] border-transparent",
-          "bg-[var(--mq-field-strong,#f4e7db)]",
-          "focus-visible:border-[var(--mq-brd-focus,#c9482f)]",
+          "[background-color:var(--mq-field-strong,#efd9c8)]",
+          "[background-image:var(--mq-grad-strong,none)]",
         ].join(" "),
         underline: [
-          "rounded-none border-0 border-b bg-transparent px-[2px] shadow-none",
+          "rounded-none border-0 border-b px-[2px]",
+          "[background-color:transparent] [background-image:none]",
           "border-b-[var(--mq-brd,rgba(120,80,55,0.30))]",
           "focus-visible:border-b-[var(--mq-brd-focus,#c9482f)]",
+          "data-[focus=true]:border-b-[var(--mq-brd-focus,#c9482f)]",
+          "shadow-[inset_0_-1px_0_rgba(255,255,255,0),0_0_0_rgba(90,60,45,0)]",
+          "hover:shadow-[inset_0_-2px_0_var(--mq-brd,rgba(120,80,55,0.30)),0_2px_4px_rgba(90,60,45,0.10)]",
+          "focus-visible:shadow-[inset_0_-2px_0_var(--mq-brd-focus,#c9482f),0_3px_6px_rgba(90,60,45,0.16)]",
+          "data-[focus=true]:shadow-[inset_0_-2px_0_var(--mq-brd-focus,#c9482f),0_3px_6px_rgba(90,60,45,0.16)]",
         ].join(" "),
       },
     },
