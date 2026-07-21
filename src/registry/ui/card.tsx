@@ -91,18 +91,18 @@ const cardVariants = cva(
         clay: [
           "bg-[var(--mq-body,#f6e7dd)]",
           "border-[var(--mq-brd,rgba(120,80,55,0.16))]",
-          "shadow-[inset_0_3px_4px_rgba(255,255,255,0.75),inset_0_-5px_8px_rgba(140,90,60,0.12),0_7px_0_var(--mq-edge,#dcc4b2),0_18px_30px_rgba(90,60,45,0.16)]",
+          "shadow-[inset_0_3px_4px_rgba(255,255,255,0.75),inset_0_-5px_8px_rgba(140,90,60,0.12),0_7px_0_var(--mq-edge,#dcc4b2),0_18px_30px_rgba(90,60,45,0.16)] [--mq-shadow-hover:inset_0_3px_4px_rgba(255,255,255,0.75),inset_0_-5px_8px_rgba(140,90,60,0.12),0_10px_0_var(--mq-edge,#dcc4b2),0_26px_44px_rgba(90,60,45,0.189)] [--mq-shadow-press:inset_0_3px_4px_rgba(255,255,255,0.938),inset_0_-5px_8px_rgba(140,90,60,0.15),0_3px_0_var(--mq-edge,#dcc4b2),0_7px_12px_rgba(90,60,45,0.136)]",
         ].join(" "),
         glass: [
           "bg-[var(--mq-body,rgba(255,255,255,0.66))]",
           "border-[var(--mq-brd,rgba(255,255,255,0.75))]",
           "backdrop-blur-[18px] backdrop-saturate-[170%]",
-          "shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_16px_38px_rgba(24,20,40,0.20)]",
+          "shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_16px_38px_rgba(24,20,40,0.20)] [--mq-shadow-hover:inset_0_1px_0_rgba(255,255,255,0.85),0_23px_55px_rgba(24,20,40,0.236)] [--mq-shadow-press:inset_0_1px_0_rgba(255,255,255,0.98),0_6px_15px_rgba(24,20,40,0.17)]",
         ].join(" "),
         skeuo: [
           "bg-[linear-gradient(180deg,var(--mq-lit,#f6f4ee),var(--mq-body,#d9d5cb))]",
           "border-[var(--mq-brd,rgba(25,25,23,0.28))]",
-          "shadow-[inset_0_1px_0_rgba(255,255,255,0.9),inset_0_-3px_5px_rgba(0,0,0,0.14),0_6px_0_var(--mq-edge,#a8a49b),0_14px_22px_rgba(38,36,31,0.24)]",
+          "shadow-[inset_0_1px_0_rgba(255,255,255,0.9),inset_0_-3px_5px_rgba(0,0,0,0.14),0_6px_0_var(--mq-edge,#a8a49b),0_14px_22px_rgba(38,36,31,0.24)] [--mq-shadow-hover:inset_0_1px_0_rgba(255,255,255,0.9),inset_0_-3px_5px_rgba(0,0,0,0.14),0_9px_0_var(--mq-edge,#a8a49b),0_20px_32px_rgba(38,36,31,0.283)] [--mq-shadow-press:inset_0_1px_0_rgba(255,255,255,0.98),inset_0_-3px_5px_rgba(0,0,0,0.175),0_2px_0_var(--mq-edge,#a8a49b),0_6px_9px_rgba(38,36,31,0.204)]",
         ].join(" "),
         // Polymorphic: almost no ornament. It adapts instead — palette follows
         // the color scheme, rhythm follows the pointer type. Unlike the Button's
@@ -111,7 +111,7 @@ const cardVariants = cva(
         adaptive: [
           "bg-[var(--mq-body,#ffffff)]",
           "border-[var(--mq-brd,rgba(23,24,23,0.14))]",
-          "shadow-[0_1px_2px_rgba(20,20,18,0.10),0_10px_24px_rgba(20,20,18,0.06)]",
+          "shadow-[0_1px_2px_rgba(20,20,18,0.10),0_10px_24px_rgba(20,20,18,0.06)] [--mq-shadow-hover:0_1px_3px_rgba(20,20,18,0.118),0_14px_35px_rgba(20,20,18,0.071)] [--mq-shadow-press:0_0px_1px_rgba(20,20,18,0.085),0_4px_10px_rgba(20,20,18,0.051)]",
           // Only ever *grows* the rhythm: padding stays owned by the size axis,
           // so this cannot shrink `lg` on a touch device. The underscores are
           // Tailwind's escape for the spaces `calc()` requires around `+`.
@@ -139,7 +139,23 @@ const cardVariants = cva(
        * above draws the ring either way.
        */
       interactive: {
-        true: `cursor-pointer hover:-translate-y-[2px] motion-reduce:hover:translate-y-0 ${FOCUS_WITHIN_RING}`,
+        true:
+          "cursor-pointer hover:-translate-y-[2px] motion-reduce:hover:translate-y-0 " +
+          // The lift and the shadow tell the same story: the card rises and its
+          // contact shadow grows with it, then collapses when pressed. Each
+          // surface derives its own hover and press lists from the resting one,
+          // so the layer count and the inset order always match and `box-shadow`
+          // interpolates instead of swapping discretely.
+          "hover:shadow-[var(--mq-shadow-hover,0_14px_35px_rgba(20,20,18,0.12))] " +
+          // Press sinks below the resting plane — the same language the Button
+          // uses, so a card that leads somewhere feels like the same material.
+          "active:translate-y-[1px] " +
+          "active:shadow-[var(--mq-shadow-press,0_4px_10px_rgba(20,20,18,0.09))] " +
+          // Both are pure feedback nobody has to read — the card is already a
+          // link or a button — so reduced motion cancels them outright rather
+          // than keeping an end state.
+          "motion-reduce:active:translate-y-0 " +
+          `${FOCUS_WITHIN_RING}`,
         false: "",
       },
     },
@@ -158,7 +174,7 @@ const cardVariants = cva(
         class:
           "[--mq-body:#fff3ea] [--mq-edge:#d8bda9] [--mq-text:#33261e] [--mq-muted:#6a5346] " +
           "[--mq-rule:rgba(120,80,55,0.20)] [--mq-brd:rgba(120,80,55,0.14)] [--mq-ring:#171817] " +
-          "shadow-[inset_0_4px_5px_rgba(255,255,255,0.85),inset_0_-6px_10px_rgba(140,90,60,0.14),0_11px_0_var(--mq-edge,#d8bda9),0_26px_44px_rgba(90,60,45,0.22)]",
+          "shadow-[inset_0_4px_5px_rgba(255,255,255,0.85),inset_0_-6px_10px_rgba(140,90,60,0.14),0_11px_0_var(--mq-edge,#d8bda9),0_26px_44px_rgba(90,60,45,0.22)] [--mq-shadow-hover:inset_0_4px_5px_rgba(255,255,255,0.85),inset_0_-6px_10px_rgba(140,90,60,0.14),0_16px_0_var(--mq-edge,#d8bda9),0_38px_64px_rgba(90,60,45,0.26)] [--mq-shadow-press:inset_0_4px_5px_rgba(255,255,255,0.98),inset_0_-6px_10px_rgba(140,90,60,0.175),0_4px_0_var(--mq-edge,#d8bda9),0_10px_18px_rgba(90,60,45,0.187)]",
       },
       {
         material: "clay",
@@ -185,7 +201,7 @@ const cardVariants = cva(
         class:
           "[--mq-body:rgba(255,255,255,0.78)] [--mq-text:#1e1e1b] [--mq-muted:#36362f] " +
           "[--mq-rule:rgba(23,24,23,0.18)] [--mq-brd:rgba(255,255,255,0.9)] [--mq-ring:#171817] " +
-          "shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_26px_54px_rgba(24,20,40,0.28)]",
+          "shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_26px_54px_rgba(24,20,40,0.28)] [--mq-shadow-hover:inset_0_1px_0_rgba(255,255,255,0.95),0_38px_78px_rgba(24,20,40,0.33)] [--mq-shadow-press:inset_0_1px_0_rgba(255,255,255,0.98),0_10px_22px_rgba(24,20,40,0.238)]",
       },
       {
         material: "glass",
@@ -209,7 +225,7 @@ const cardVariants = cva(
         class:
           "[--mq-lit:#fbfaf6] [--mq-body:#dedad0] [--mq-edge:#9c988f] [--mq-text:#23231f] [--mq-muted:#4a4943] " +
           "[--mq-rule:rgba(25,25,23,0.26)] [--mq-brd:rgba(25,25,23,0.3)] [--mq-ring:#171817] " +
-          "shadow-[inset_0_2px_0_rgba(255,255,255,0.95),inset_0_-4px_7px_rgba(0,0,0,0.16),0_10px_0_var(--mq-edge,#9c988f),0_24px_36px_rgba(38,36,31,0.3)]",
+          "shadow-[inset_0_2px_0_rgba(255,255,255,0.95),inset_0_-4px_7px_rgba(0,0,0,0.16),0_10px_0_var(--mq-edge,#9c988f),0_24px_36px_rgba(38,36,31,0.3)] [--mq-shadow-hover:inset_0_2px_0_rgba(255,255,255,0.95),inset_0_-4px_7px_rgba(0,0,0,0.16),0_14px_0_var(--mq-edge,#9c988f),0_35px_52px_rgba(38,36,31,0.354)] [--mq-shadow-press:inset_0_2px_0_rgba(255,255,255,0.98),inset_0_-4px_7px_rgba(0,0,0,0.2),0_4px_0_var(--mq-edge,#9c988f),0_10px_14px_rgba(38,36,31,0.255)]",
       },
       {
         material: "skeuo",
@@ -217,7 +233,7 @@ const cardVariants = cva(
         class:
           "[--mq-lit:transparent] [--mq-body:transparent] [--mq-edge:transparent] " +
           "[--mq-brd:rgba(25,25,23,0.38)] [--mq-rule:rgba(25,25,23,0.26)] [--mq-ring:currentColor] " +
-          "shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]",
+          "shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] [--mq-shadow-hover:inset_0_1px_0_rgba(255,255,255,0.55)] [--mq-shadow-press:inset_0_1px_0_rgba(255,255,255,0.688)]",
       },
       // ------------------------------------------------------------ adaptive
       {
@@ -235,10 +251,10 @@ const cardVariants = cva(
         class:
           "[--mq-body:#ffffff] [--mq-text:#1c1c19] [--mq-muted:#55554e] " +
           "[--mq-rule:rgba(23,24,23,0.14)] [--mq-brd:rgba(23,24,23,0.10)] [--mq-ring:#171817] " +
-          "shadow-[0_2px_4px_rgba(20,20,18,0.10),0_22px_44px_rgba(20,20,18,0.16)] " +
+          "shadow-[0_2px_4px_rgba(20,20,18,0.10),0_22px_44px_rgba(20,20,18,0.16)] [--mq-shadow-hover:0_3px_6px_rgba(20,20,18,0.118),0_32px_64px_rgba(20,20,18,0.189)] [--mq-shadow-press:0_1px_2px_rgba(20,20,18,0.085),0_9px_18px_rgba(20,20,18,0.136)] " +
           "dark:[--mq-body:#2a2a2f] dark:[--mq-text:#f1efe9] dark:[--mq-muted:#b9b7b0] " +
           "dark:[--mq-rule:rgba(255,255,255,0.16)] dark:[--mq-brd:rgba(255,255,255,0.14)] dark:[--mq-ring:#f1efe9] " +
-          "dark:shadow-[0_2px_4px_rgba(0,0,0,0.5),0_22px_44px_rgba(0,0,0,0.55)]",
+          "dark:shadow-[0_2px_4px_rgba(0,0,0,0.5),0_22px_44px_rgba(0,0,0,0.55)] [--mq-shadow-hover:0_3px_6px_rgba(0,0,0,0.59),0_32px_64px_rgba(0,0,0,0.649)] [--mq-shadow-press:0_1px_2px_rgba(0,0,0,0.425),0_9px_18px_rgba(0,0,0,0.468)]",
       },
       {
         material: "adaptive",
