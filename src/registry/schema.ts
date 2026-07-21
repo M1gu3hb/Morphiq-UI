@@ -27,8 +27,15 @@ export type RegistryCategory =
  * every material's hover/press recipe a second time behind a `data-*` selector,
  * and the duplicate could silently drift from the real one. They stay live —
  * the reader hovers and presses the actual component in the preview.
+ *
+ * The list is additive: a preview only handles the states its component really
+ * has, and falls through to its default render for the rest. `error` exists
+ * because form controls have an invalid state that is exactly what a reader
+ * needs to inspect — before it was here, the Input preview had to borrow the
+ * `loading` slot to show it, which meant the docs said one thing and the switch
+ * said another.
  */
-export type PreviewState = "default" | "focus" | "loading" | "disabled";
+export type PreviewState = "default" | "focus" | "loading" | "disabled" | "error";
 
 /**
  * Props every preview component receives from the detail page switcher.

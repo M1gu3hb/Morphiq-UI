@@ -11,14 +11,12 @@ import type { StyleSlug } from "@/lib/component-data";
  * distributable: what a user copies is the component, never the scaffolding
  * used to document it.
  *
- * Note on the `loading` slot: `PreviewState` is
- * `default | focus | loading | disabled`, and a text field has no loading
- * behaviour — but it very much has an *error* state, which is the one a reader
- * needs to see. So the docs surface reuses that slot to show the invalid field,
- * and the rendered copy says so out loud rather than pretending. Adding an
- * `error` member to `PreviewState` would mean editing the shared
- * `src/registry/schema.ts`, which this round's guardrail forbids; it is written
- * up in the report as a change for the orchestrator to make.
+ * The invalid field is shown under the `error` state, which is a real member of
+ * `PreviewState`. It used to borrow the `loading` slot, because no `error` state
+ * existed yet and a text field has no loading behaviour to show there — so the
+ * switch said "loading" while the field said "invalid". That is fixed: `error`
+ * now means error, and `loading` falls through to the default render because
+ * this control genuinely has nothing to show for it.
  */
 
 type InputVariant = "default" | "filled" | "underline";
@@ -45,7 +43,7 @@ const COPY: Record<StyleSlug, { label: string; placeholder: string; helper: stri
 
 export function InputPreview({ material, variant, size, state }: PreviewProps) {
   const copy = COPY[material];
-  const isError = state === "loading";
+  const isError = state === "error";
 
   return (
     <div className="w-[min(340px,100%)]">
@@ -53,7 +51,7 @@ export function InputPreview({ material, variant, size, state }: PreviewProps) {
         data-focus={state === "focus" ? "true" : undefined}
         defaultValue={isError ? "not-an-email" : ""}
         disabled={state === "disabled"}
-        errorText={isError ? "Enter a valid address — this is the error state." : undefined}
+        errorText={isError ? "Enter a valid email address." : undefined}
         helperText={copy.helper}
         label={copy.label}
         material={material}

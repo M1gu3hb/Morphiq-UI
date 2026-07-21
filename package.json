@@ -17,6 +17,7 @@
     "test:e2e": "playwright test",
     "check": "npm run lint && npm run typecheck && npm run test:studio && npm run test:registry && npm run build",
     "registry:gen": "node scripts/gen-registry.mjs",
+    "prepare": "npm run registry:gen",
     "predev": "npm run registry:gen",
     "prebuild": "npm run registry:gen",
     "pretypecheck": "npm run registry:gen",
