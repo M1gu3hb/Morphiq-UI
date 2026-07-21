@@ -112,6 +112,10 @@ const rangeVariants = cva(
   [
     "absolute rounded-[inherit] bg-[var(--mq-range,#9f2f23)]",
     "shadow-[var(--mq-range-shadow,inset_0_1px_1px_rgba(255,255,255,0.40))]",
+    // Radix updates horizontal ranges through left/right and vertical ranges
+    // through top/bottom. Name those live inset properties exactly so the fill
+    // eases without adding a phantom transform transition.
+    "transition-[left,right,top,bottom] duration-200 ease-out motion-reduce:transition-none",
     "data-[orientation=horizontal]:h-full data-[orientation=vertical]:w-full",
     "forced-colors:bg-[Highlight] forced-colors:shadow-none",
   ].join(" "),
@@ -122,9 +126,9 @@ const thumbVariants = cva(
     "relative block size-[var(--mq-thumb-size,20px)] shrink-0 rounded-full border-2",
     "cursor-grab touch-none border-[var(--mq-thumb-brd,#7c281f)] bg-[var(--mq-thumb,#fff4eb)]",
     "shadow-[var(--mq-thumb-shadow,0_3px_10px_rgba(72,38,29,0.24))]",
-    "transition-[box-shadow,background-color,border-color,scale] duration-150 ease-out motion-reduce:transition-none",
+    "transition-[box-shadow,background-color,scale] duration-150 ease-out motion-reduce:transition-none",
     "hover:bg-[var(--mq-thumb-hover,#ffe3d3)] hover:shadow-[var(--mq-thumb-shadow-hover,0_5px_14px_rgba(72,38,29,0.28))]",
-    "active:cursor-grabbing active:scale-[0.94]",
+    "active:cursor-grabbing active:scale-[1.08]",
     "focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-[var(--mq-ring,#171817)]",
     "group-data-[focus=true]/slider:outline-2 group-data-[focus=true]/slider:outline-offset-[3px] group-data-[focus=true]/slider:outline-[var(--mq-ring,#171817)]",
     "data-[disabled]:cursor-not-allowed data-[disabled]:shadow-none",

@@ -124,7 +124,12 @@ type TabsSize = "sm" | "md" | "lg";
  * `<TabsList>` and `<TabsTrigger>` stay dumb while `variant` and `size` are
  * still declared exactly once.
  */
-const TabsStyleContext = React.createContext<{ size: TabsSize; variant: TabsVariant }>({
+const TabsStyleContext = React.createContext<{
+  activeValue?: string;
+  size: TabsSize;
+  variant: TabsVariant;
+}>({
+  activeValue: undefined,
   size: "md",
   variant: "default",
 });
@@ -240,22 +245,45 @@ export type TabsProps = React.ComponentPropsWithRef<typeof TabsPrimitive.Root> &
 
 /**
  * Root. Uncontrolled with `defaultValue`, controlled with `value` +
- * `onValueChange` — the state is Radix's, so there is none here to drift.
+ * `onValueChange`. Radix owns selection; the local mirror only exposes its
+ * selected value to Trigger for the initial 0 / -1 tabindex contract.
  */
 export function Tabs({
   className,
+  defaultValue,
   material = "clay",
+  onValueChange,
   size = "md",
+  value,
   variant = "default",
   ...props
 }: TabsProps) {
-  const style = React.useMemo(() => ({ size, variant }), [size, variant]);
+  // Radix 1.1.17 initially leaves every RovingFocus item at tabIndex=-1 and
+  // makes the tablist itself the entry stop. Mirror only the selected value so
+  // the active Trigger can expose the canonical roving DOM contract (0 / -1);
+  // Radix still owns activation, arrows, Home/End, focus and all ARIA wiring.
+  const [uncontrolledValue, setUncontrolledValue] = React.useState(defaultValue);
+  const activeValue = value ?? uncontrolledValue;
+  const handleValueChange = React.useCallback(
+    (nextValue: string) => {
+      if (value === undefined) setUncontrolledValue(nextValue);
+      onValueChange?.(nextValue);
+    },
+    [onValueChange, value],
+  );
+  const style = React.useMemo(
+    () => ({ activeValue, size, variant }),
+    [activeValue, size, variant],
+  );
   return (
     <TabsStyleContext.Provider value={style}>
       <TabsPrimitive.Root
         {...props}
         className={cn("flex flex-col gap-[12px]", MATERIAL_TOKENS[material], className)}
         data-material={material}
+        defaultValue={defaultValue}
+        onValueChange={handleValueChange}
+        value={value}
       />
     </TabsStyleContext.Provider>
   );
@@ -429,13 +457,17 @@ export function TabsList({
 
 export function TabsTrigger({
   className,
+  tabIndex,
+  value,
   ...props
 }: React.ComponentPropsWithRef<typeof TabsPrimitive.Trigger>) {
-  const { size, variant } = React.useContext(TabsStyleContext);
+  const { activeValue, size, variant } = React.useContext(TabsStyleContext);
   return (
     <TabsPrimitive.Trigger
       {...props}
       className={cn(triggerVariants({ variant, size }), className)}
+      tabIndex={tabIndex ?? (value === activeValue ? 0 : -1)}
+      value={value}
     />
   );
 }
