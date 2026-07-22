@@ -52,3 +52,31 @@ Cada ejecutor deja un reporte al terminar cada prompt/tarea. La convención comp
 (nombrado secuencial `NNNN-slug.md`, secciones obligatorias y cómo se auditan) está en
 [`reports/README.md`](reports/README.md). Usa [`reports/TEMPLATE.md`](reports/TEMPLATE.md)
 como base.
+
+## Tiers de componentes (core vs. animado)
+
+La biblioteca crece hacia cientos de componentes en dos tiers:
+
+- **Core** — los 22 originales, **cero dependencias de runtime**: se copian con solo
+  `src/lib/cn.ts`. El guard de `verify-registry` es estricto: `var()` con fallback
+  literal, sin `:root`/`globals.css`, y solo las primitivas de estilo/comportamiento ya
+  presentes.
+- **Animado** — componentes cuyo propósito es el movimiento. Pueden **declarar e importar**
+  dependencias npm de una **allowlist** (`animatedTierPackages` en
+  `scripts/verify-registry.mjs`, empieza con `motion`). El guard de dependency-manifest
+  sigue exigiendo `declarado === importado`; la allowlist solo deja de prohibir esos
+  paquetes. Ampliarla es un cambio de una línea, deliberado y revisable.
+
+**Lo que NO se relaja para nadie:** self-containment del CSS, contraste, cobertura de
+transición (verificada con `getAnimations()`, sin propiedades fantasma),
+`prefers-reduced-motion` y `forced-colors`. El gate (`npm run check`) es obligatorio para
+ambos tiers.
+
+**Materiales:** los componentes con superficie se hacen en los materiales que apliquen
+(clay/glass/skeuo/adaptive, y `liquid-glass` a medida que se cablea). Los intrínsecamente
+visuales (fondos, texto animado, efectos) suelen ser material-agnósticos (un solo estilo),
+lo cual es esperado. Las categorías nuevas — `text`, `backgrounds`, `effects`, `blocks` —
+conviven con las seis originales.
+
+**Attribution:** cada componente derivado de una fuente MIT/Apache conserva su crédito en
+[`CREDITS.md`](CREDITS.md). Fuentes con Commons Clause son solo inspiración.

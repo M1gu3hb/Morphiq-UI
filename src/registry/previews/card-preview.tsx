@@ -63,41 +63,68 @@ export function CardPreview({ material, variant, size, state }: PreviewProps) {
   const resolvedVariant = asVariant(variant);
 
   return (
-    <Card
-      className="w-[min(340px,100%)]"
-      data-focus={state === "focus" ? "true" : undefined}
-      disabled={state === "disabled"}
-      interactive
-      loading={state === "loading"}
-      material={material}
-      size={asSize(size)}
-      variant={resolvedVariant}
-    >
-      <CardHeader>
-        <CardTitle>{copy.title}</CardTitle>
-        <CardDescription>{copy.description}</CardDescription>
-      </CardHeader>
-      <CardBody>
-        <p className="m-0">{copy.body}</p>
-      </CardBody>
-      <CardFooter divided>
-        <Button
-          disabled={state === "disabled"}
-          intent="primary"
-          material={material}
-          size="sm"
-        >
-          Open
-        </Button>
-        <Button
-          disabled={state === "disabled"}
-          intent="ghost"
-          material={material}
-          size="sm"
-        >
-          Dismiss
-        </Button>
-      </CardFooter>
-    </Card>
+    <div className="flex flex-col items-start gap-[18px]">
+      <Card
+        className="w-[min(340px,100%)]"
+        data-focus={state === "focus" ? "true" : undefined}
+        disabled={state === "disabled"}
+        interactive
+        loading={state === "loading"}
+        material={material}
+        size={asSize(size)}
+        variant={resolvedVariant}
+      >
+        <CardHeader>
+          <CardTitle>{copy.title}</CardTitle>
+          <CardDescription>{copy.description}</CardDescription>
+        </CardHeader>
+        <CardBody>
+          <p className="m-0">{copy.body}</p>
+        </CardBody>
+        <CardFooter divided>
+          <Button
+            disabled={state === "disabled"}
+            intent="primary"
+            material={material}
+            size="sm"
+          >
+            Open
+          </Button>
+          <Button
+            disabled={state === "disabled"}
+            intent="ghost"
+            material={material}
+            size="sm"
+          >
+            Dismiss
+          </Button>
+        </CardFooter>
+      </Card>
+      {/* The fifth material, piloted as a fixed specimen: the material switcher
+          is driven by `entry.materials`, which stays at four until liquid-glass
+          is wired end to end (see docs/reports/0037). It refracts the stage
+          backdrop behind it, so it needs no separate context. */}
+      <Card
+        className="w-[min(340px,100%)]"
+        data-focus={state === "focus" ? "true" : undefined}
+        disabled={state === "disabled"}
+        interactive
+        loading={state === "loading"}
+        material="liquid-glass"
+        size={asSize(size)}
+        variant={resolvedVariant}
+      >
+        <CardHeader>
+          <CardTitle>Liquid glass</CardTitle>
+          <CardDescription>Refracts the surface behind it</CardDescription>
+        </CardHeader>
+        <CardBody>
+          <p className="m-0">
+            A frosted pane that bends the backdrop where the browser supports it,
+            and stays legible over any background.
+          </p>
+        </CardBody>
+      </Card>
+    </div>
   );
 }

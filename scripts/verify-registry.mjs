@@ -24,8 +24,42 @@ const registryPath = join(root, "src", "registry", "index.ts");
 const entriesDir = join(root, "src", "registry", "entries");
 const generatedPath = join(root, "src", "registry", "generated.ts");
 const globalsPath = join(root, "src", "app", "globals.css");
-const validMaterials = new Set(["clay", "glass", "skeuo", "adaptive"]);
+const validMaterials = new Set(["clay", "glass", "skeuo", "adaptive", "liquid-glass"]);
 const implicitPeerPackages = new Set(["react", "react-dom"]);
+
+/**
+ * npm packages a registry component is allowed to import.
+ *
+ * The dependency-manifest guard below already forces `declared === imported`,
+ * so a component can never smuggle in an undeclared package. This allowlist is
+ * the second half of the contract, and it matters more now than it did at 22:
+ * the library is about to ingest hundreds of adapted open-source components, and
+ * an allowlist is what stops any one of them from quietly pulling in an
+ * unvetted, unlicensed or heavy dependency. Anything a component declares must
+ * appear here.
+ *
+ * `coreAllowedPackages` are the styling and behavioural primitives the original
+ * self-contained 22 are built from — every one is already a project dependency.
+ *
+ * `animatedTierPackages` is the *animated tier*: components that opt out of the
+ * strict zero-runtime-dependency rule because their whole point is motion. It
+ * starts with `motion` (modern Framer Motion) and is deliberately a plain array
+ * so extending it is a one-line, reviewable change. The core 22 do not and must
+ * not use anything from this list — self-containment is still enforced for them
+ * by the leak guards, which this allowlist does not touch.
+ */
+const coreAllowedPackages = [
+  "class-variance-authority",
+  "clsx",
+  "tailwind-merge",
+  "lucide-react",
+  "@radix-ui/react-slot",
+  "@radix-ui/react-slider",
+  "@radix-ui/react-tabs",
+  "@radix-ui/react-tooltip",
+];
+const animatedTierPackages = ["motion"];
+const allowedPackages = new Set([...coreAllowedPackages, ...animatedTierPackages]);
 const nodeBuiltins = new Set([
   ...builtinModules,
   ...builtinModules.map((name) => `node:${name}`),
@@ -714,6 +748,16 @@ try {
     const phantomInternal = difference(declaredInternal, actualDependencies.internal);
     assert.deepEqual(missingNpm, [], `${entry.slug}: undeclared npm imports: ${missingNpm.join(", ")}`);
     assert.deepEqual(phantomNpm, [], `${entry.slug}: phantom npm dependencies: ${phantomNpm.join(", ")}`);
+    // Every declared package must be on the allowlist above. This is the gate
+    // that keeps an unvetted dependency out of the catalog; to permit a new one,
+    // add it to `coreAllowedPackages` or `animatedTierPackages` on purpose.
+    const offAllowlist = difference(declaredNpm, allowedPackages);
+    assert.deepEqual(
+      offAllowlist,
+      [],
+      `${entry.slug}: npm dependencies not on the allowlist: ${offAllowlist.join(", ")}. ` +
+        `Add them to coreAllowedPackages or animatedTierPackages in scripts/verify-registry.mjs to permit them.`,
+    );
     assert.deepEqual(missingInternal, [], `${entry.slug}: undeclared internal imports: ${missingInternal.join(", ")}`);
     assert.deepEqual(phantomInternal, [], `${entry.slug}: phantom internal dependencies: ${phantomInternal.join(", ")}`);
     return entry.slug;

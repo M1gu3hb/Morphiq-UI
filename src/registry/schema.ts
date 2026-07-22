@@ -11,14 +11,27 @@ import type { StyleSlug } from "@/lib/component-data";
  * to change.
  */
 
-/** Categories used for grouping and filtering in the catalog. */
+/**
+ * Categories used for grouping and filtering in the catalog.
+ *
+ * The first six back the original 22 components. The last four were opened for
+ * the library-expansion tier (see `docs/component-expansion-map.md`): `text`
+ * for animated type, `backgrounds` for full-bleed canvases, `effects` for
+ * standalone visual flourishes, and `blocks` for composed sections. A component
+ * in one of those categories is usually material-agnostic (a single style),
+ * which is expected and correct.
+ */
 export type RegistryCategory =
   | "actions"
   | "cards"
   | "navigation"
   | "feedback"
   | "media"
-  | "inputs";
+  | "inputs"
+  | "text"
+  | "backgrounds"
+  | "effects"
+  | "blocks";
 
 /**
  * States a preview can be put into deterministically.

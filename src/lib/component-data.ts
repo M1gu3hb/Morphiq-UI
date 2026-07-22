@@ -1,12 +1,42 @@
+/**
+ * The four material styles every core component ships recipes for. This is the
+ * type that flows through the whole catalog: `entry.materials`, the detail-page
+ * switcher and `PreviewProps.material` all use it, and every component's own
+ * `material` prop is a subset of it.
+ *
+ * `liquid-glass` is deliberately NOT a member here. Adding it would force every
+ * one of the 22 components (all under `src/registry/ui`) to accept it, and this
+ * branch is scoped not to touch those files while Codex works in parallel. It
+ * is instead a fifth *style family* (`StyleFamilySlug` below), piloted as a
+ * component-local material on Button and Card. Promoting it to a first-class
+ * catalog material is a follow-up that has to run on its own, editing every
+ * component and preview at once — see docs/reports/0037.
+ */
 export type StyleSlug = "clay" | "glass" | "skeuo" | "adaptive";
 
-export const styleFamilies: Array<{
-  slug: StyleSlug;
+/**
+ * Every style family the site knows about, including the ones not yet wired as
+ * a catalog-wide material. A superset of `StyleSlug`; used by `styleFamilies`
+ * and the Studio, never as a component's `material` prop.
+ */
+export type StyleFamilySlug = StyleSlug | "liquid-glass";
+
+type StyleFamily<Slug extends StyleFamilySlug> = {
+  slug: Slug;
   number: string;
   name: string;
   description: string;
   descriptionEs: string;
-}> = [
+};
+
+/**
+ * The families rendered catalog-wide today — the four that every surface (the
+ * home grid, the Studio and `SurfacePreview`) already knows how to draw, so the
+ * slug stays `StyleSlug`. The fifth is deferred to the coordinated round that
+ * wires liquid-glass end to end, because those consumers each assume four; its
+ * identity ships now, decoupled, as `pilotStyleFamily`.
+ */
+export const styleFamilies: Array<StyleFamily<StyleSlug>> = [
   {
     slug: "clay",
     number: "01",
@@ -36,6 +66,23 @@ export const styleFamilies: Array<{
     descriptionEs: "Componentes que cambian elemento, densidad y presentación según el contexto.",
   },
 ];
+
+/**
+ * The fifth style family, piloted on Button and Card ahead of the catalog-wide
+ * wiring. Its name and description live here — decoupled from `styleFamilies`
+ * so it does not force the four-family assumption baked into the home grid, the
+ * Studio and `SurfacePreview`. A later round spreads this into `styleFamilies`
+ * and teaches those surfaces to draw it.
+ */
+export const pilotStyleFamily: StyleFamily<"liquid-glass"> = {
+  slug: "liquid-glass",
+  number: "05",
+  name: "Liquid Glass",
+  description:
+    "Refractive glass that bends the backdrop through an SVG displacement filter, with chromatic edges and a specular rim; falls back to a frosted blur where the filter is unsupported.",
+  descriptionEs:
+    "Vidrio refractivo que curva el fondo con un filtro de desplazamiento SVG, con bordes cromáticos y un filo especular; cae a un desenfoque esmerilado donde el filtro no está soportado.",
+};
 
 export const componentLibrary: Array<{
   slug: string;
