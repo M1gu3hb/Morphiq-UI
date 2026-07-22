@@ -112,6 +112,37 @@ const buttonVariants = cva(
           // the size variant, so this cannot shrink `lg` on a touch device.
           "pointer-coarse:min-h-[48px] pointer-coarse:gap-[10px]",
         ].join(" "),
+        // Liquid glass: a translucent pane that refracts the backdrop through an
+        // inlined SVG displacement filter, with a chromatic edge and a specular
+        // rim. It reuses the glass tokens (below) so the label keeps glass's
+        // measured >= 4.5:1 contract; the refraction is decoration layered on
+        // top, never something the legibility depends on.
+        "liquid-glass": [
+          "bg-[var(--mq-body,rgba(23,24,23,0.74))] text-[var(--mq-text,#ffffff)]",
+          "border-[var(--mq-brd,rgba(255,255,255,0.34))]",
+          // Frosted base, ALWAYS on and written as one arbitrary property so it
+          // composes predictably. This is the fallback every engine gets.
+          "[backdrop-filter:blur(11px)_saturate(1.7)]",
+          "[-webkit-backdrop-filter:blur(11px)_saturate(1.7)]",
+          // Enhancement: where the engine parses `url()` in backdrop-filter
+          // (Chromium refracts; Safari parses it and no-ops), bend the backdrop
+          // through the inlined filter. `blur()`+`saturate()` are re-declared so
+          // the frosted look can never be lost, and `-webkit-` is deliberately
+          // NOT re-declared here — Chromium would apply it last and clobber the
+          // refraction. Firefox lacks the support and keeps the base.
+          "supports-[backdrop-filter:url('#m')]:[backdrop-filter:url(#mq-liquid-glass)_blur(11px)_saturate(1.7)]",
+          // Self-contained, always-rendered: a bright specular filo, a cyan/
+          // magenta chromatic fringe at the vertical edges, a faint bottom lip
+          // and a cool cast shadow.
+          "shadow-[inset_0_1px_0_rgba(255,255,255,0.85),inset_1.5px_0_0_rgba(120,190,255,0.30),inset_-1.5px_0_0_rgba(255,120,190,0.26),inset_0_-1px_0_rgba(255,255,255,0.22),0_10px_26px_rgba(20,18,40,0.22)]",
+          "hover:-translate-y-[1px]",
+          "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.92),inset_1.5px_0_0_rgba(120,190,255,0.34),inset_-1.5px_0_0_rgba(255,120,190,0.30),inset_0_-1px_0_rgba(255,255,255,0.24),0_14px_32px_rgba(20,18,40,0.28)]",
+          "active:translate-y-[1px]",
+          "active:shadow-[inset_0_2px_7px_rgba(20,18,40,0.30)]",
+          // Forced colours discard backdrop filters and shadows; a real border
+          // keeps the control's bounds once the glass is gone.
+          "forced-colors:[backdrop-filter:none] forced-colors:shadow-none forced-colors:border-[CanvasText]",
+        ].join(" "),
       },
       intent: {
         primary: "",
@@ -220,6 +251,27 @@ const buttonVariants = cva(
           "[--mq-body:transparent] [--mq-text:currentColor] [--mq-brd:transparent] [--mq-ring:currentColor] " +
           "shadow-none hover:shadow-none hover:bg-[rgba(125,125,120,0.16)] active:shadow-none",
       },
+      // --------------------------------------------------------- liquid-glass
+      // Tokens mirror the glass intents, so the label keeps glass's measured
+      // >= 4.5:1 contrast; only the refraction and chromatic rim differ.
+      {
+        material: "liquid-glass",
+        intent: "primary",
+        class:
+          "[--mq-body:rgba(23,24,23,0.74)] [--mq-text:#ffffff] [--mq-brd:rgba(255,255,255,0.34)] [--mq-ring:#171817]",
+      },
+      {
+        material: "liquid-glass",
+        intent: "secondary",
+        class:
+          "[--mq-body:rgba(255,255,255,0.72)] [--mq-text:#23231f] [--mq-brd:rgba(255,255,255,0.78)] [--mq-ring:#171817]",
+      },
+      {
+        material: "liquid-glass",
+        intent: "ghost",
+        class:
+          "[--mq-body:rgba(255,255,255,0.55)] [--mq-text:#23231f] [--mq-brd:rgba(255,255,255,0.5)] [--mq-ring:#171817]",
+      },
     ],
     defaultVariants: {
       material: "clay",
@@ -249,6 +301,36 @@ export type ButtonProps = Omit<React.ComponentPropsWithRef<"button">, "color"> &
      */
     loading?: boolean;
   };
+
+/**
+ * The SVG displacement filter that the `liquid-glass` recipe references from
+ * `backdrop-filter: url(#mq-liquid-glass)`. It travels with the component so the
+ * material stays self-contained, and is rendered as a zero-size, aria-hidden
+ * sibling only when that material is active — a sibling, not a child, so it can
+ * never interfere with the `asChild` Slot below.
+ *
+ * A single stable id is used across instances; duplicate ids resolve to the
+ * first match and every copy is byte-identical, so the reference is stable. The
+ * static `seed` keeps it deterministic and unanimated, which is why there is
+ * nothing here for `prefers-reduced-motion` to switch off.
+ */
+function LiquidGlassFilter() {
+  return (
+    <svg aria-hidden="true" className="pointer-events-none absolute size-0" focusable="false">
+      <filter
+        colorInterpolationFilters="sRGB"
+        height="140%"
+        id="mq-liquid-glass"
+        width="140%"
+        x="-20%"
+        y="-20%"
+      >
+        <feTurbulence baseFrequency="0.012 0.014" numOctaves="1" result="noise" seed="7" type="fractalNoise" />
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="7" xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+    </svg>
+  );
+}
 
 function Spinner({ className }: { className?: string }) {
   return (
@@ -286,6 +368,7 @@ export function Button({
   const Comp = asChild ? Slot : "button";
   const isDisabled = disabled || loading;
   const state = disabled ? "disabled" : loading ? "loading" : "idle";
+  const isLiquidGlass = material === "liquid-glass";
 
   // Activation is suppressed here rather than by the native `disabled`
   // attribute. That covers three cases the attribute cannot: `loading` (which
@@ -311,11 +394,13 @@ export function Button({
   }
 
   return (
-    // `props` is spread first on purpose: the accessibility and state
-    // attributes below are derived from `loading`/`disabled` and must win over
-    // anything a caller passes through.
-    <Comp
-      {...props}
+    <>
+      {isLiquidGlass ? <LiquidGlassFilter /> : null}
+      {/* `props` is spread first on purpose: the accessibility and state
+          attributes below are derived from `loading`/`disabled` and must win
+          over anything a caller passes through. */}
+      <Comp
+        {...props}
       aria-busy={loading || undefined}
       aria-disabled={isDisabled || undefined}
       className={cn(buttonVariants({ material, intent, size }), className)}
@@ -327,15 +412,16 @@ export function Button({
       // by the `disabled` prop alone — see the `loading` docs above for why the
       // busy state must not use it. When `asChild` swaps in another element,
       // `type` is forwarded only if the caller actually supplied one.
-      {...(asChild
-        ? type !== undefined
-          ? { type }
-          : {}
-        : { disabled, type: type ?? "button" })}
-    >
-      {loading ? <Spinner /> : null}
-      <Slottable>{children}</Slottable>
-    </Comp>
+        {...(asChild
+          ? type !== undefined
+            ? { type }
+            : {}
+          : { disabled, type: type ?? "button" })}
+      >
+        {loading ? <Spinner /> : null}
+        <Slottable>{children}</Slottable>
+      </Comp>
+    </>
   );
 }
 

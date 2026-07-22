@@ -37,16 +37,34 @@ const LABEL: Record<StyleSlug, string> = {
 
 export function ButtonPreview({ material, variant, size, state }: PreviewProps) {
   return (
-    <Button
-      data-focus={state === "focus" ? "true" : undefined}
-      disabled={state === "disabled"}
-      intent={asIntent(variant)}
-      loading={state === "loading"}
-      material={material}
-      size={asSize(size)}
-    >
-      {LABEL[material]}
-      <ArrowUpRight aria-hidden="true" className="size-[1.05em] shrink-0" />
-    </Button>
+    <div className="flex flex-col items-start gap-[16px]">
+      <Button
+        data-focus={state === "focus" ? "true" : undefined}
+        disabled={state === "disabled"}
+        intent={asIntent(variant)}
+        loading={state === "loading"}
+        material={material}
+        size={asSize(size)}
+      >
+        {LABEL[material]}
+        <ArrowUpRight aria-hidden="true" className="size-[1.05em] shrink-0" />
+      </Button>
+      {/* The fifth material is piloted here as a fixed specimen rather than
+          through the material switcher: the catalog switcher is driven by
+          `entry.materials`, which stays at the four catalog-wide materials until
+          liquid-glass is wired end to end (see docs/reports/0037). It refracts
+          the stage backdrop behind it, so it needs no separate context. */}
+      <Button
+        data-focus={state === "focus" ? "true" : undefined}
+        disabled={state === "disabled"}
+        intent={asIntent(variant)}
+        loading={state === "loading"}
+        material="liquid-glass"
+        size={asSize(size)}
+      >
+        Liquid glass
+        <ArrowUpRight aria-hidden="true" className="size-[1.05em] shrink-0" />
+      </Button>
+    </div>
   );
 }

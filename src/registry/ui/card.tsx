@@ -117,6 +117,28 @@ const cardVariants = cva(
           // Tailwind's escape for the spaces `calc()` requires around `+`.
           "pointer-coarse:gap-[calc(var(--mq-gap,14px)_+_4px)]",
         ].join(" "),
+        // Liquid glass: a refracting pane. It reuses the glass tokens (in the
+        // compound variants below) so body and muted text keep glass's measured
+        // contrast; the refraction, the chromatic rim and the specular filo are
+        // decoration layered on top.
+        "liquid-glass": [
+          "bg-[var(--mq-body,rgba(255,255,255,0.66))]",
+          "border-[var(--mq-brd,rgba(255,255,255,0.75))]",
+          // Frosted base, always on, as one arbitrary property — the fallback.
+          "[backdrop-filter:blur(16px)_saturate(1.7)]",
+          "[-webkit-backdrop-filter:blur(16px)_saturate(1.7)]",
+          // Enhancement where `url()` in backdrop-filter is parsed: refract the
+          // backdrop through the inlined filter, blur+saturate re-declared so the
+          // frost survives, and no `-webkit-` here (Chromium would clobber it).
+          "supports-[backdrop-filter:url('#m')]:[backdrop-filter:url(#mq-liquid-glass)_blur(16px)_saturate(1.7)]",
+          // Specular filo + chromatic fringe + cool cast shadow. The hover and
+          // press variants keep the same four layers in the same inset order so
+          // an interactive card's shadow interpolates rather than swapping.
+          "shadow-[inset_0_1px_0_rgba(255,255,255,0.85),inset_1.5px_0_0_rgba(120,190,255,0.24),inset_-1.5px_0_0_rgba(255,120,190,0.20),0_16px_38px_rgba(24,20,40,0.20)] [--mq-shadow-hover:inset_0_1px_0_rgba(255,255,255,0.92),inset_1.5px_0_0_rgba(120,190,255,0.28),inset_-1.5px_0_0_rgba(255,120,190,0.24),0_24px_55px_rgba(24,20,40,0.26)] [--mq-shadow-press:inset_0_1px_0_rgba(255,255,255,0.98),inset_1.5px_0_0_rgba(120,190,255,0.20),inset_-1.5px_0_0_rgba(255,120,190,0.18),0_7px_16px_rgba(24,20,40,0.17)]",
+          // Forced colours discard the backdrop filter and shadows; the border
+          // keeps the card's bounds once the glass is gone.
+          "forced-colors:[backdrop-filter:none] forced-colors:shadow-none forced-colors:border-[CanvasText]",
+        ].join(" "),
       },
       variant: {
         default: "",
@@ -210,6 +232,32 @@ const cardVariants = cva(
           "[--mq-body:transparent] [--mq-brd:rgba(255,255,255,0.85)] " +
           "[--mq-rule:rgba(255,255,255,0.5)] [--mq-ring:currentColor] " +
           "backdrop-blur-none backdrop-saturate-100 shadow-none",
+      },
+      // -------------------------------------------------------- liquid-glass
+      // Tokens mirror the glass intents so body and muted text keep glass's
+      // measured contrast; only the refraction and chromatic rim differ.
+      {
+        material: "liquid-glass",
+        variant: "default",
+        class:
+          "[--mq-body:rgba(255,255,255,0.66)] [--mq-text:#1e1e1b] [--mq-muted:#36362f] " +
+          "[--mq-rule:rgba(23,24,23,0.18)] [--mq-brd:rgba(255,255,255,0.75)] [--mq-ring:#171817]",
+      },
+      {
+        material: "liquid-glass",
+        variant: "elevated",
+        class:
+          "[--mq-body:rgba(255,255,255,0.78)] [--mq-text:#1e1e1b] [--mq-muted:#36362f] " +
+          "[--mq-rule:rgba(23,24,23,0.18)] [--mq-brd:rgba(255,255,255,0.9)] [--mq-ring:#171817]",
+      },
+      {
+        material: "liquid-glass",
+        variant: "outline",
+        class:
+          "[--mq-body:transparent] [--mq-brd:rgba(255,255,255,0.85)] " +
+          "[--mq-rule:rgba(255,255,255,0.5)] [--mq-ring:currentColor] " +
+          // Outline has no pane to refract, so it drops back to a hairline.
+          "[backdrop-filter:none] [-webkit-backdrop-filter:none] shadow-none",
       },
       // --------------------------------------------------------------- skeuo
       {
@@ -316,6 +364,33 @@ function Shimmer() {
   );
 }
 
+/**
+ * The SVG displacement filter referenced by the `liquid-glass` recipe from
+ * `backdrop-filter: url(#mq-liquid-glass)`. Inlined so the material stays
+ * self-contained, rendered as a zero-size aria-hidden sibling of the card only
+ * when that material is active — a sibling, not a child, so it never disturbs
+ * `asChild`. The id is shared with the same filter in `button.tsx`; both copies
+ * are byte-identical, so a page with both resolves to one and the reference is
+ * stable. The static seed leaves nothing for reduced-motion to switch off.
+ */
+function LiquidGlassFilter() {
+  return (
+    <svg aria-hidden="true" className="pointer-events-none absolute size-0" focusable="false">
+      <filter
+        colorInterpolationFilters="sRGB"
+        height="140%"
+        id="mq-liquid-glass"
+        width="140%"
+        x="-20%"
+        y="-20%"
+      >
+        <feTurbulence baseFrequency="0.012 0.014" numOctaves="1" result="noise" seed="7" type="fractalNoise" />
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="7" xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+    </svg>
+  );
+}
+
 export function Card({
   asChild = false,
   children,
@@ -330,22 +405,26 @@ export function Card({
 }: CardProps) {
   const Comp = asChild ? Slot : "div";
   const state = disabled ? "disabled" : loading ? "loading" : "idle";
+  const isLiquidGlass = material === "liquid-glass";
 
   return (
-    // `props` is spread first on purpose: the accessibility and state
-    // attributes below are derived from `loading`/`disabled` and must win over
-    // anything a caller passes through.
-    <Comp
-      {...props}
-      aria-busy={loading || undefined}
-      aria-disabled={disabled || undefined}
-      className={cn(cardVariants({ material, variant, size, interactive }), className)}
-      data-material={material ?? "clay"}
-      data-state={state}
-    >
-      {loading ? <Shimmer /> : null}
-      {children}
-    </Comp>
+    <>
+      {isLiquidGlass ? <LiquidGlassFilter /> : null}
+      {/* `props` is spread first on purpose: the accessibility and state
+          attributes below are derived from `loading`/`disabled` and must win
+          over anything a caller passes through. */}
+      <Comp
+        {...props}
+        aria-busy={loading || undefined}
+        aria-disabled={disabled || undefined}
+        className={cn(cardVariants({ material, variant, size, interactive }), className)}
+        data-material={material ?? "clay"}
+        data-state={state}
+      >
+        {loading ? <Shimmer /> : null}
+        {children}
+      </Comp>
+    </>
   );
 }
 
