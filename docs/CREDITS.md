@@ -53,13 +53,13 @@ When a component is derived from one of the redistributable sources, add a row h
 comment. Apache 2.0 sources additionally require their `NOTICE` text to travel with the
 distribution.
 
-## Component inspiration credits (original implementations)
+## Catalog components (adapted)
 
-The components below are original Morphiq implementations. Their interaction or visual
-category was researched in the credited project; no source code was copied or adapted.
+Original Morphiq code written in the tactile material style, inspired by — not copied from —
+the MIT sources noted. Effects are re-derived from documented CSS/React techniques.
 
-| Component | Inspiration | License | Morphiq implementation |
+| Component | Slug | Inspired by | Source license |
 |---|---|---|---|
-| Magnetic Button | smoothui | MIT | Original proximity field, dual spring recipe and four Morphiq materials. |
-| Gradient Button | Lightswind | MIT | Original two-layer CSS gradient flow and four Morphiq materials. |
-| Rainbow Button | magicui | MIT | Original spectral perimeter/halo system and four Morphiq materials. |
+| Magic Card | `magic-card` | magicui (magic-card) | MIT |
+| Tilt 3D Card | `tilt-card` | smoothui / magicui (tilt patterns) | MIT |
+| Neon Gradient Card | `neon-gradient-card` | magicui (neon-gradient-card) | MIT |
