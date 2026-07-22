@@ -52,3 +52,14 @@ When a component is derived from one of the redistributable sources, add a row h
 (component, source, license) and keep the original license header in the component's file
 comment. Apache 2.0 sources additionally require their `NOTICE` text to travel with the
 distribution.
+
+## Catalog components (adapted)
+
+Original Morphiq code written in the tactile material style, inspired by — not copied from —
+the MIT sources noted. Effects are re-derived from documented CSS/React techniques.
+
+| Component | Slug | Inspired by | Source license |
+|---|---|---|---|
+| Magic Card | `magic-card` | magicui (magic-card) | MIT |
+| Tilt 3D Card | `tilt-card` | smoothui / magicui (tilt patterns) | MIT |
+| Neon Gradient Card | `neon-gradient-card` | magicui (neon-gradient-card) | MIT |
