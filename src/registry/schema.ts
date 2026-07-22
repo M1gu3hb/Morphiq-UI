@@ -31,7 +31,8 @@ export type RegistryCategory =
   | "text"
   | "backgrounds"
   | "effects"
-  | "blocks";
+  | "blocks"
+  | "data";
 
 /**
  * States a preview can be put into deterministically.
