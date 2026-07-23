@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, Facebook, Link as LinkIcon, Linkedin, Mail, Share2, Twitter } from "lucide-react";
+import { Briefcase, Check, Link as LinkIcon, Mail, Send, Share2, Users } from "lucide-react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/cn";
 
@@ -310,11 +310,11 @@ export function ShareButton({
       {
         id: "x",
         label: "X (Twitter)",
-        icon: <Twitter />,
+        icon: <Send />,
         href: `https://twitter.com/intent/tweet?url=${u}${t ? `&text=${t}` : ""}`,
       },
-      { id: "facebook", label: "Facebook", icon: <Facebook />, href: `https://www.facebook.com/sharer/sharer.php?u=${u}` },
-      { id: "linkedin", label: "LinkedIn", icon: <Linkedin />, href: `https://www.linkedin.com/sharing/share-offsite/?url=${u}` },
+      { id: "facebook", label: "Facebook", icon: <Users />, href: `https://www.facebook.com/sharer/sharer.php?u=${u}` },
+      { id: "linkedin", label: "LinkedIn", icon: <Briefcase />, href: `https://www.linkedin.com/sharing/share-offsite/?url=${u}` },
       { id: "email", label: "Email", icon: <Mail />, href: `mailto:?subject=${t}&body=${u}` },
     ];
   }, [targets, url, shareTitle]);
