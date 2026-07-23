@@ -3,7 +3,7 @@
 - **Ronda:** R18 · Sección Feedback (tanda 2)
 - **Ejecutor:** Claude Code (en paralelo con Codex · Texto tanda 3)
 - **Rama:** `feat/feedback-batch2` → PR contra `main`
-- **PR:** #61
+- **PR:** #60
 - **Gate:** `npm run check` → `{"components":195,...,"status":"ok"}` (build genera 10 rutas SSG nuevas)
 - **Base:** `main` a 185 entradas (tras mergear backgrounds-batch3 + navigation-batch2 #59 en el Paso 0). 185 + 10 = **195**.
 
@@ -135,6 +135,31 @@ declaran; **cuatro no lo importan y correctamente no lo declaran** — `rating` 
 inline), `loading-overlay` (spinner hand-rolled), `signal-bars` y `segmented-progress` (elementos
 planos). Ninguno importa ni declara `motion`. También se verificó `category: "feedback"` en los diez
 y que los materiales coincidan exactamente con el estándar (4 solo en los tres con superficie).
+
+## ⚠️ Incidente: los 30 archivos sin trackear fueron borrados del árbol compartido
+
+**Qué pasó.** Tras generar los 10 componentes y verificarlos (lint y typecheck en verde, 195
+entradas en mi rama), el `HEAD` compartido saltó a `feat/text-batch3` (Codex) y **los 30 archivos
+quedaron eliminados del disco**. El síntoma fue un `git add` fallando con
+`pathspec 'src/registry/ui/rating.tsx' did not match any files` mientras el conteo de entradas
+seguía en 195 — que en esa rama correspondía a `main(185)` + los 10 de Texto de Codex, no a los
+míos. La causa compatible con lo observado es un borrado de archivos sin trackear (`git clean -fd`
+o equivalente) ejecutado desde el otro agente; mis archivos aún no estaban committeados, así que
+git no tenía copia de ellos.
+
+**Cómo se recuperó.** Los transcripts de los agentes de generación conservan las llamadas `Write`
+con el contenido íntegro de cada archivo. Se extrajeron de
+`subagents/workflows/wf_25d49fa4-696/agent-*.jsonl`, tomando la **última** escritura por ruta (algún
+agente reescribió un archivo), con una lista blanca que solo permitía las 30 rutas de mis 10 slugs
+—de modo que la restauración no podía tocar nada ajeno—. Resultado: **30/30 restaurados, 0
+faltantes**; el único path descartado fue un script auxiliar que un agente había dejado en su
+scratchpad. El reporte había sobrevivido al borrado.
+
+**Qué se cambió para que no se repita.** Los archivos se **commitearon de inmediato** tras la
+restauración (lo committeado sobrevive a `git clean`) y la rama se **empujó a origin antes del
+gate**, en vez de al final. Recomendación para el flujo: en rondas paralelas conviene commitear
+temprano —no solo antes del gate— porque el trabajo sin trackear en un árbol compartido es
+frágil ante cualquier limpieza del otro agente.
 
 ## Nota de entorno (árbol compartido con Codex)
 
