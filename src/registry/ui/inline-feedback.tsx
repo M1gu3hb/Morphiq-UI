@@ -100,19 +100,20 @@ const TONE_LABEL: Record<InlineFeedbackTone, string> = {
 };
 
 /**
- * Declared for real `:focus-visible` (a caller may make the message focusable,
- * or drop a link inside it) and identically for a `data-focus="true"` attribute
- * so the documentation preview can render the focused look without
- * synthesising a keyboard event.
+ * Declared for real `:focus-visible` — a caller may make the message focusable
+ * for a "jump to the first error" flow — and identically for a
+ * `data-focus="true"` attribute so the documentation preview can render the
+ * focused look without synthesising a keyboard event. `:focus-within` is
+ * deliberately absent: a link inside the message already draws its own ring,
+ * and outlining the message as well would read as two separate targets.
  */
 const FOCUS_RING =
   "focus-visible:outline-2 focus-visible:outline-offset-[3px] " +
   "focus-visible:outline-[var(--mq-ring,#171817)] " +
-  "focus-within:outline-2 focus-within:outline-offset-[3px] " +
-  "focus-within:outline-[var(--mq-ring,#171817)] " +
   "data-[focus=true]:outline-2 data-[focus=true]:outline-offset-[3px] " +
   "data-[focus=true]:outline-[var(--mq-ring,#171817)] " +
-  "forced-colors:focus-visible:outline-[Highlight] forced-colors:focus-within:outline-[Highlight]";
+  "forced-colors:focus-visible:outline-[Highlight] " +
+  "forced-colors:data-[focus=true]:outline-[Highlight]";
 
 /**
  * The message arrives from under the field it belongs to: a 4px drop plus a
@@ -215,7 +216,7 @@ function resolveUrgency(
 
 function ToneIcon({ tone }: { tone: InlineFeedbackTone }) {
   const Icon = TONE_ICON[tone];
-  return <Icon aria-hidden="true" focusable="false" />;
+  return <Icon />;
 }
 
 export type InlineFeedbackProps = Omit<

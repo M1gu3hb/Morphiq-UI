@@ -133,7 +133,10 @@ const COUNTDOWN_KEYFRAMES = `@keyframes mq-countdown-roll{from{opacity:0;transla
 
 const countdownVariants = cva(
   [
-    "relative isolate inline-flex max-w-full flex-col gap-[var(--mq-gap,12px)]",
+    // Named group so the controls below can mirror a forced `data-focus` from
+    // the panel — the docs surface sets one attribute and the real focus look
+    // lands on whatever is actually focusable.
+    "group/mq-timer relative isolate inline-flex max-w-full flex-col gap-[var(--mq-gap,12px)]",
     "rounded-[var(--mq-radius,17px)] border border-solid p-[var(--mq-pad,16px)]",
     "border-[var(--mq-brd,rgba(23,24,23,0.16))] bg-[var(--mq-plate,#f4f2ec)]",
     "text-[color:var(--mq-text,#141412)]",
@@ -219,6 +222,11 @@ const controlVariants = cva(
     "disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0",
     "[&>svg]:size-[13px]",
     FOCUS_RING,
+    // Parallel to `data-[focus=true]`, but driven from the panel, so a docs
+    // preview can force the button's real focus ring without a keyboard event.
+    "group-data-[focus=true]/mq-timer:outline-2 group-data-[focus=true]/mq-timer:outline-offset-[3px]",
+    "group-data-[focus=true]/mq-timer:outline-[var(--mq-ring,#171817)]",
+    "forced-colors:group-data-[focus=true]/mq-timer:outline-[Highlight]",
     "forced-colors:border-[CanvasText] forced-colors:bg-[Canvas] forced-colors:text-[CanvasText] forced-colors:shadow-none",
   ].join(" "),
 );

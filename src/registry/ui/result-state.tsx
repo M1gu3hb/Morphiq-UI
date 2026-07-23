@@ -432,8 +432,10 @@ export type ResultStateProps = Omit<
   React.ComponentPropsWithRef<"div">,
   // `role`, `aria-live` and `aria-atomic` are derived from `tone` + `urgency`;
   // omitting them keeps a caller from desyncing the announced urgency from the
-  // outcome the panel is actually showing. Use `urgency` instead.
-  "aria-atomic" | "aria-live" | "color" | "role" | "title"
+  // outcome the panel is actually showing. Use `urgency` instead. `children` is
+  // omitted too: the panel composes its own slots, so a stray child would be
+  // dropped by the explicit JSX children below rather than rendered.
+  "aria-atomic" | "aria-live" | "children" | "color" | "role" | "title"
 > &
   VariantProps<typeof resultStateVariants> & {
     /** Required heading naming the outcome. */

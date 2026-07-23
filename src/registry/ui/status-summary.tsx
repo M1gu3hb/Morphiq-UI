@@ -20,8 +20,9 @@ import { cn } from "@/lib/cn";
  * and an optional link to a status detail page.
  *
  * Self-contained by design. Every material recipe lives in this file, every
- * `var()` carries a literal fallback, no `:root` variable and no global class is
- * read, and the keyframes travel with the component through a React 19
+ * custom-property reference carries a literal fallback, no site-level variable
+ * and no global class is read, and the keyframes travel with the component
+ * through a React 19
  * `<style href precedence>` that is hoisted and deduplicated. Copying this file
  * plus `src/lib/cn.ts` reproduces the entire look.
  *
@@ -341,7 +342,10 @@ function StateGlyph({ state }: { state: StatusState }) {
  * `urgency="auto"`: only a MAJOR outage is worth interrupting a screen-reader
  * user mid-sentence. Everything else — including a partial outage — is polite.
  */
-function resolveUrgency(state: StatusState, urgency: StatusUrgency): StatusUrgency {
+function resolveUrgency(
+  state: StatusState,
+  urgency: StatusUrgency,
+): Exclude<StatusUrgency, "auto"> {
   if (urgency !== "auto") return urgency;
   return state === "outage" ? "assertive" : "polite";
 }
@@ -421,7 +425,7 @@ export function StatusSummary({
         : undefined;
 
   const Heading = HEADING_TAG[headingLevel];
-  const inert = loading || disabled;
+  const isInert = loading || disabled;
   const state = disabled ? "disabled" : loading ? "loading" : "idle";
 
   const derivedCounts =
@@ -545,7 +549,7 @@ export function StatusSummary({
               aria-label={servicesLabel}
               className="m-0 flex list-none flex-col gap-[var(--mq-row-gap,8px)] p-0"
               data-status-list=""
-              inert={inert || undefined}
+              inert={isInert || undefined}
             >
               {rows.map((service, index) => (
                 <li

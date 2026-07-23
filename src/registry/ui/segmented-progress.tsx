@@ -114,16 +114,22 @@ const segmentedProgressVariants = cva(
     "[--mq-track:#e6e4dd] [--mq-brd:#a8a69d] [--mq-empty-rule:#8f8d84]",
     "[--mq-fill:#3f5bd9] [--mq-fill-edge:rgba(28,40,110,0.48)] [--mq-lead-halo:rgba(63,91,217,0.22)]",
     "[--mq-pill:rgba(23,24,23,0.05)] [--mq-ring:#171817]",
+    "[--mq-done:#15703f] [--mq-done-edge:rgba(8,54,30,0.50)] [--mq-done-halo:rgba(21,112,63,0.24)]",
     "dark:[--mq-text:#f1efe9] dark:[--mq-muted:#b9b7b0]",
     "dark:[--mq-track:#33333a] dark:[--mq-brd:#6b6b74] dark:[--mq-empty-rule:#8a8a93]",
     "dark:[--mq-fill:#8ea2ff] dark:[--mq-fill-edge:rgba(226,231,255,0.42)] dark:[--mq-lead-halo:rgba(142,162,255,0.26)]",
     "dark:[--mq-pill:rgba(255,255,255,0.08)] dark:[--mq-ring:#f1efe9]",
+    "dark:[--mq-done:#5ad18b] dark:[--mq-done-edge:rgba(226,255,238,0.42)] dark:[--mq-done-halo:rgba(90,209,139,0.26)]",
     // Colour used SEMANTICALLY, never alone: reaching the last segment retints
     // the run, and the word "Complete" says the same thing beside it.
-    "data-[complete=true]:[--mq-fill:#15703f] data-[complete=true]:[--mq-fill-edge:rgba(8,54,30,0.50)]",
-    "data-[complete=true]:[--mq-lead-halo:rgba(21,112,63,0.24)]",
-    "dark:data-[complete=true]:[--mq-fill:#5ad18b] dark:data-[complete=true]:[--mq-fill-edge:rgba(226,255,238,0.42)]",
-    "dark:data-[complete=true]:[--mq-lead-halo:rgba(90,209,139,0.26)]",
+    //
+    // One rule per token rather than a light and a dark copy: the scheme already
+    // lives in `--mq-done*`, and an attribute selector outranks the plain class
+    // the `dark:` recipe uses, so the completed palette wins by SPECIFICITY
+    // rather than by hoping the generated stylesheet ordered the two variants.
+    "data-[complete=true]:[--mq-fill:var(--mq-done,#15703f)]",
+    "data-[complete=true]:[--mq-fill-edge:var(--mq-done-edge,rgba(8,54,30,0.50))]",
+    "data-[complete=true]:[--mq-lead-halo:var(--mq-done-halo,rgba(21,112,63,0.24))]",
     // Passive states, driven by data-state so a busy readout never inherits the
     // faded disabled look.
     "data-[state=disabled]:opacity-55 data-[state=loading]:cursor-progress",
@@ -197,7 +203,7 @@ const segmentFillVariants = cva(
     "motion-reduce:transition-none",
     // Forced colours discard fills and shadows but NOT background images, so the
     // sheen has to be cleared by hand or it would sit on a system-coloured run.
-    "forced-colors:!bg-[Highlight] forced-colors:[background-image:none] forced-colors:shadow-none",
+    "forced-colors:bg-[Highlight] forced-colors:[background-image:none] forced-colors:shadow-none",
   ].join(" "),
 );
 
@@ -365,7 +371,7 @@ export function SegmentedProgress({
               data-filled={fraction > 0 ? "true" : "false"}
               data-lead={index === leadIndex ? "true" : undefined}
               data-segmented-progress-segment=""
-              key={index}
+              key={`segment-${index}`}
               style={
                 {
                   // The stagger is derived from the index alone, so the markup is

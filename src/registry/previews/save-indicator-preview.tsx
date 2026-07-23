@@ -20,6 +20,11 @@ import type { PreviewProps } from "@/registry/schema";
  * `savedAt` is seeded from an effect rather than during render: reading the
  * clock while rendering is exactly the hydration bug this component is designed
  * around, and the preview has to demonstrate the safe pattern, not break it.
+ *
+ * `loading` shows the saving state, `error` and `focus` show the error state
+ * (the only one with a real retry button to focus), and `disabled` falls back to
+ * idle — a save chip has no disabled state, and inventing one would document
+ * something it cannot do.
  */
 
 const VARIANTS: readonly string[] = ["default"];
@@ -29,7 +34,7 @@ const STATUSES: readonly SaveIndicatorStatus[] = ["idle", "saving", "saved", "er
 type SaveIndicatorSize = "sm" | "md" | "lg";
 
 /** Two minutes, so the seeded timestamp reads as a believable "2 minutes ago". */
-const SEEDED_AGE_MS = 120_000;
+const SEEDED_AGE_MS = 120000;
 /** How long the simulated retry stays in flight before it reports success. */
 const RETRY_DURATION_MS = 1400;
 
@@ -40,6 +45,9 @@ function asVariant(value: string): string {
 function asSize(value: string): SaveIndicatorSize {
   return (SIZES.includes(value) ? value : "md") as SaveIndicatorSize;
 }
+
+/** A simulated retry, tagged with the base state it was started from. */
+type RetryRun = { from: SaveIndicatorStatus; status: SaveIndicatorStatus };
 
 /** Which state the featured chip should demonstrate for the selected preview state. */
 function featuredStatus(state: PreviewProps["state"]): SaveIndicatorStatus {
@@ -53,8 +61,11 @@ export function SaveIndicatorPreview({ material, variant, size, state }: Preview
   const resolvedSize = asSize(size);
   const resolvedVariant = asVariant(variant);
   const [savedAt, setSavedAt] = React.useState<number | null>(null);
-  const [retryStatus, setRetryStatus] = React.useState<SaveIndicatorStatus | null>(null);
+  // The simulated retry remembers which base state it started from, so switching
+  // the state selector discards it purely — no effect, no stale override.
+  const [retry, setRetry] = React.useState<RetryRun | null>(null);
   const retryTimer = React.useRef<number | null>(null);
+  const base = featuredStatus(state);
 
   // Deterministic first render (no timestamp), then a real relative phrase once
   // the browser has a clock to read. `setState` lands in a timer callback, never
@@ -71,12 +82,15 @@ export function SaveIndicatorPreview({ material, variant, size, state }: Preview
   }, []);
 
   const handleRetry = () => {
-    setRetryStatus("saving");
+    setRetry({ from: base, status: "saving" });
     if (retryTimer.current !== null) window.clearTimeout(retryTimer.current);
-    retryTimer.current = window.setTimeout(() => setRetryStatus("saved"), RETRY_DURATION_MS);
+    retryTimer.current = window.setTimeout(
+      () => setRetry({ from: base, status: "saved" }),
+      RETRY_DURATION_MS,
+    );
   };
 
-  const featured = retryStatus ?? featuredStatus(state);
+  const featured = retry !== null && retry.from === base ? retry.status : base;
   const others = STATUSES.filter((status) => status !== featured);
 
   return (

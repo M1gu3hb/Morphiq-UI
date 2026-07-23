@@ -145,15 +145,15 @@ const STATUS_ICON: Record<SaveIndicatorStatus, LucideIcon> = {
   error: CircleAlert,
 };
 
-const MINUTE_MS = 60_000;
-const HOUR_MS = 3_600_000;
-const DAY_MS = 86_400_000;
+const MINUTE_MS = 60000;
+const HOUR_MS = 3600000;
+const DAY_MS = 86400000;
 /** Below this the phrase is "just now", so second-by-second churn is avoided. */
-const JUST_NOW_MS = 45_000;
+const JUST_NOW_MS = 45000;
 /** How often the relative phrase is recomputed once the component is mounted. */
-const REFRESH_INTERVAL_MS = 15_000;
+const REFRESH_INTERVAL_MS = 15000;
 /** ECMAScript's maximum representable time value; beyond it `Date` is invalid. */
-const MAX_TIME_MS = 8_640_000_000_000_000;
+const MAX_TIME_MS = 8640000000000000;
 
 /**
  * Keyframes travel with the component. React 19 hoists this and deduplicates it
@@ -497,8 +497,8 @@ export function SaveIndicator({
               "[&>svg]:size-[var(--mq-glyph,14px)]",
               "animate-[mq-save-pop_320ms_cubic-bezier(0.34,1.56,0.64,1)_both]",
               "motion-reduce:animate-none",
+              "forced-colors:border forced-colors:border-[CanvasText]",
               "forced-colors:bg-[Canvas] forced-colors:text-[CanvasText] forced-colors:shadow-none",
-              "forced-colors:[border:1px_solid_CanvasText]",
               iconClassName,
             )}
             data-save-icon=""
@@ -527,7 +527,11 @@ export function SaveIndicator({
               data-save-timestamp=""
             >
               <span aria-hidden="true">·</span> {timestampPrefix}
-              <time dateTime={timestampIso}>{timestampText}</time>
+              {timestampIso ? (
+                <time dateTime={timestampIso}>{timestampText}</time>
+              ) : (
+                <span>{timestampText}</span>
+              )}
             </span>
           ) : null}
         </span>

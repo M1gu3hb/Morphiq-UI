@@ -200,7 +200,9 @@ const BAR_BASE = [
 
 /** A lit bar: solid body, lit top edge, seated shadow. Highlight when forced. */
 const BAR_FILLED = [
-  "border-[var(--mq-fill,#15703f)] bg-[var(--mq-fill,#15703f)]",
+  // The explicit `color:` hint keeps `border-[…]` in the border-COLOUR group, so
+  // tailwind-merge can never mistake it for a width and drop the 1px `border`.
+  "border-[color:var(--mq-fill,#15703f)] bg-[var(--mq-fill,#15703f)]",
   "shadow-[inset_0_1px_0_rgba(255,255,255,0.38),inset_0_-2px_3px_rgba(0,0,0,0.20),0_1px_2px_rgba(20,20,18,0.22)]",
   "forced-colors:bg-[Highlight] forced-colors:border-[CanvasText]",
 ].join(" ");
@@ -211,7 +213,7 @@ const BAR_FILLED = [
  * greyscale, colour blindness and forced colours alike.
  */
 const BAR_TRACK = [
-  "border-[var(--mq-track-brd,#a8a69d)] bg-[var(--mq-track,rgba(28,28,25,0.06))]",
+  "border-[color:var(--mq-track-brd,#a8a69d)] bg-[var(--mq-track,rgba(28,28,25,0.06))]",
   "shadow-[inset_0_1px_2px_rgba(20,20,18,0.10)]",
   "forced-colors:bg-[Canvas] forced-colors:border-[GrayText]",
 ].join(" ");
@@ -282,9 +284,6 @@ export function SignalBars({
   const valueText = ariaValueText ?? `${levelLabel}, ${countText}`;
   const summary = `${accessibleName}: ${levelLabel}. ${countText} bars filled.`;
 
-  // Derived purely from the index — a plain map, no cursor mutated after render.
-  const bars = Array.from({ length: levelCount }, (_, index) => index);
-
   return (
     <>
       {/*
@@ -319,7 +318,9 @@ export function SignalBars({
           className="flex h-[var(--mq-bar-max,24px)] shrink-0 items-end gap-[var(--mq-gap,4px)]"
           data-signal-track=""
         >
-          {bars.map((index) => (
+          {/* Each bar is derived purely from its own index — nothing declared in
+              the component body is reassigned from inside the map. */}
+          {Array.from({ length: levelCount }, (_unused, index) => (
             <span
               className={cn(
                 BAR_BASE,

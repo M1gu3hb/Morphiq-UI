@@ -110,7 +110,7 @@ export function LoadingOverlayPreview({ material, variant, size, state }: Previe
           is up and focus skips straight past it — that is `inert` doing its job.
         */}
         <button
-          className="self-start rounded-[10px] border border-current/30 px-[10px] py-[6px] text-[11px] font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+          className="self-start rounded-[10px] border border-black/20 px-[10px] py-[6px] text-[11px] font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current dark:border-white/25"
           type="button"
         >
           Review all payouts
