@@ -3,7 +3,7 @@
 - **Ronda:** R16 · Sección Acciones (tanda 3)
 - **Ejecutor:** Claude Code (en paralelo con Codex · Bloques tanda 2)
 - **Rama:** `feat/actions-batch3` → PR contra `main`
-- **PR:** #56
+- **PR:** #57
 - **Gate:** `npm run check` → `{"components":155,...,"status":"ok"}` (build genera 10 rutas SSG nuevas)
 - **Base:** `main` a 145 entradas (tras mergear #55 media + #54 data en el Paso 0). 145 + 10 = **155**.
 
