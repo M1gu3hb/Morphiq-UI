@@ -75,8 +75,9 @@ reduced-motion/forced-colors suprimen los bucles.
 
 ## Resultado esperado vs. real
 
-Los diez componentes y sus previews están implementados y respaldados en commits separados. El
-resultado final del gate se registra abajo una vez aislados de forma reversible los archivos ajenos.
+El resultado coincide con lo esperado: 215 entradas, diez rutas SSG nuevas, suite estructural verde
+y 222/222 páginas generadas. Los diez componentes quedaron respaldados en commits separados antes
+del gate, sin incluir archivos de Cards.
 
 ## Bugs / obstáculos y cómo se resolvieron
 
@@ -88,12 +89,17 @@ resultado final del gate se registra abajo una vez aislados de forma reversible 
   incompleto. El lint propio quedó verde y el gate global se difirió hasta estabilizar el árbol.
 - React lint rechazó una autorreferencia temprana del callback del resorte; el bucle se encapsuló en
   una función local `tick`, con cancelación conservada al desmontar.
+- Para obtener el conteo exacto se apartaron de forma reversible 18 archivos ajenos a
+  `D:\morphiq-r19-cards-aside-20260723-1825`; tras el gate se restauraron todos sin conflictos ni
+  sobrescrituras. Los archivos nuevos que Claude creó durante el build permanecieron intactos.
 
 ## Verificación (gate)
 
-- ESLint dirigido a los 30 archivos de componente: pendiente de consolidación final.
-- TypeScript y suite estructural: pendientes del único `npm run check` final.
-- Registry esperado: `{"components":215,"selfContained":true,"guards":"ok","status":"ok"}`.
+- ESLint dirigido a los 30 archivos de componente: verde.
+- Escaneo dirigido de `var()` sin fallback literal en las diez UIs: verde.
+- `npm run check`: verde en árbol estable con exactamente 215 entradas.
+- Registry: `{"components":215,"selfContained":true,"guards":"ok","status":"ok"}`.
+- Next build: 222/222 páginas estáticas, incluidas las diez rutas nuevas.
 - Sin navegador, servidor, Playwright, `getAnimations()` ni medición manual, por instrucción.
 
 ## Riesgos, deuda y pendientes
@@ -104,4 +110,5 @@ resultado final del gate se registra abajo una vez aislados de forma reversible 
 
 ## Estado final
 
-Implementación completa; gate final y PR pendientes.
+Completo: implementación, respaldo temprano, reconciliación segura del árbol compartido y gate verde;
+listo para PR.
