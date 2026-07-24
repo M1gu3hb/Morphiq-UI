@@ -1,0 +1,31 @@
+import { SaveIndicatorPreview } from "@/registry/previews/save-indicator-preview";
+import type { RegistryEntry } from "@/registry/schema";
+
+/** Registry entry for the self-contained Save Indicator component. */
+export const entry: RegistryEntry = {
+  slug: "save-indicator",
+  name: "Save Indicator",
+  nameEs: "Indicador de guardado",
+  category: "feedback",
+  materials: ["adaptive"],
+  description:
+    "An autosave status chip with idle, saving, saved and error states, each carrying its own glyph, its own real text label and an optional relative timestamp, plus a retry button and a hydration-safe clock.",
+  descriptionEs:
+    "Un chip de estado de autoguardado con estados inactivo, guardando, guardado y error; cada uno lleva su propio glifo, su propia etiqueta de texto real y una marca de tiempo relativa opcional, además de un botón de reintento y un reloj seguro para la hidratación.",
+  variants: [{ id: "default", label: "Default", labelEs: "Predeterminado" }],
+  sizes: [
+    { id: "sm", label: "Small", labelEs: "Pequeño" },
+    { id: "md", label: "Medium", labelEs: "Mediano" },
+    { id: "lg", label: "Large", labelEs: "Grande" },
+  ],
+  dependencies: {
+    npm: ["class-variance-authority", "clsx", "lucide-react", "tailwind-merge"],
+    internal: ["src/lib/cn.ts"],
+  },
+  a11y:
+    "The chip is a live region so an autosave that changes in place is announced without moving focus: urgency=\"auto\" gives idle, saving and saved a role=\"status\" region with aria-live=\"polite\", and escalates error to role=\"alert\" with aria-live=\"assertive\"; both are aria-atomic so the state label and the timestamp are read as one sentence instead of a stray fragment, and urgency=\"polite\", \"assertive\" or \"off\" overrides that policy when the product flow knows better than the state does. aria-busy is set while saving. State is never carried by colour alone: it is spelled out in the visible label (Autosave on, Saving…, Saved, Could not save), prefixed in the accessible name by an sr-only state word (Idle, In progress, Success, Error) that survives a caller's custom label and can be localised with statusLabel, drawn as a distinct icon shape per state (cloud with an arrow, broken ring, bare checkmark, circled exclamation), and reinforced by a shape and weight difference — the error state squares off the icon well and thickens the chip border. Every glyph is decorative and aria-hidden. The optional retry control is a real button with an accessible name; it stays mounted while the retry is in flight so the chip does not jump, but is then both disabled and inert, which removes it from the tab order and from the accessibility tree so a keyboard user can never reach a control that would do nothing. Focus is drawn with a two-pixel offset outline in the state's own ring token, mirrored on data-focus=\"true\" for documentation and visual tests, and repainted to Highlight in forced-colors mode. Reduced motion drops the spinner's rotation and the icon's entrance pop, but the busy state is still carried by the label and by aria-busy, and each animation's resting end state is the fully rendered icon, so nothing is left mid-fade. Forced colours keep the chip's bounds with a CanvasText border, clear the gradient wash and every shadow, and paint the glyphs and text in CanvasText. The relative timestamp is never computed during render — savedAt is a prop and the phrase is produced inside an effect on a cleared interval — so a statically generated page cannot hydrate with a mismatched time. Label and timestamp measure between 5.8:1 and 10.4:1 against the chip in all four states and in both colour schemes.",
+  a11yEs:
+    "El chip es una región viva para que un autoguardado que cambia en el sitio se anuncie sin mover el foco: urgency=\"auto\" asigna a inactivo, guardando y guardado una región role=\"status\" con aria-live=\"polite\", y eleva el error a role=\"alert\" con aria-live=\"assertive\"; ambas usan aria-atomic para que la etiqueta de estado y la marca de tiempo se lean como una sola frase y no como un fragmento suelto, y urgency=\"polite\", \"assertive\" u \"off\" sustituye esa política cuando el flujo del producto sabe más que el estado. aria-busy se activa mientras se guarda. El estado nunca depende solo del color: se escribe en la etiqueta visible (Autosave on, Saving…, Saved, Could not save), se antepone al nombre accesible una palabra de estado sr-only (Idle, In progress, Success, Error) que sobrevive a una etiqueta personalizada y se traduce con statusLabel, se dibuja con una forma de icono distinta por estado (nube con flecha, anillo abierto, marca de verificación, exclamación en círculo) y se refuerza con una diferencia de forma y grosor: el estado de error cuadra el pozo del icono y engrosa el borde del chip. Todos los glifos son decorativos y llevan aria-hidden. El control de reintento opcional es un botón real con nombre accesible; permanece montado mientras el reintento está en curso para que el chip no salte, pero entonces queda deshabilitado e inert, lo que lo saca del orden de tabulación y del árbol de accesibilidad para que nadie con teclado alcance un control que no haría nada. El foco se dibuja con un contorno de dos píxeles y desplazamiento en el token de anillo del propio estado, replicado en data-focus=\"true\" para documentación y pruebas visuales, y repintado a Highlight en modo de colores forzados. El movimiento reducido elimina el giro del spinner y el rebote de entrada del icono, pero el estado ocupado sigue estando en la etiqueta y en aria-busy, y el estado final en reposo de cada animación es el icono completamente dibujado, así que nada queda a medio aparecer. Los colores forzados conservan los límites del chip con un borde CanvasText, eliminan el degradado y todas las sombras y pintan glifos y texto en CanvasText. La marca de tiempo relativa nunca se calcula durante el render — savedAt es una prop y la frase se produce dentro de un efecto sobre un intervalo que se limpia — de modo que una página generada estáticamente no puede hidratarse con una hora distinta. Etiqueta y marca de tiempo miden entre 5,8:1 y 10,4:1 sobre el chip en los cuatro estados y en ambos esquemas de color.",
+  sourcePath: "src/registry/ui/save-indicator.tsx",
+  Preview: SaveIndicatorPreview,
+};
