@@ -405,11 +405,10 @@ export function SwipeCards({
   ref,
   rejectLabel = "Reject",
   resetLabel = "Start over",
-  resetLabelledBy,
   size = "md",
   variant = "default",
   ...props
-}: SwipeCardsProps & { resetLabelledBy?: never }) {
+}: SwipeCardsProps) {
   const baseId = React.useId();
   const [cursor, setCursor] = React.useState(0);
   const [offset, setOffset] = React.useState<{ x: number; y: number } | null>(null);
